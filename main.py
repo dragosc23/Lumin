@@ -29,6 +29,7 @@ PLAYER_MAX_HEALTH = 200
 
 # Import monster classes
 from monster import BaseMonster, Grunt, Flyer
+from src.save_manager import SaveManager # Import SaveManager
 
 LEVEL_CONFIGS = [
     {
@@ -321,7 +322,48 @@ player_height = 50
 # Player initial position is now set by load_level
 player = Player(PLAYER_START_X, PLAYER_START_Y, player_width, player_height, WHITE)
 
-# Initial level load
+# Instantiate SaveManager
+save_manager = SaveManager()
+# save_manager.delete_save() # Uncomment for testing fresh starts
+
+# Attempt to load game data
+loaded_data = save_manager.load_data()
+initial_player_pos_tuple = (PLAYER_START_X, PLAYER_START_Y) # Default start
+
+if loaded_data:
+    print("Save data found. Loading game...")
+    current_level_index = loaded_data.get("current_level_index", 0)
+    initial_player_inventory = loaded_data.get("player_inventory", [])
+    initial_player_health = loaded_data.get("player_health", PLAYER_MAX_HEALTH)
+    loaded_player_pos_list = loaded_data.get("player_position")
+    if loaded_player_pos_list and isinstance(loaded_player_pos_list, list) and len(loaded_player_pos_list) == 2:
+        initial_player_pos_tuple = tuple(loaded_player_pos_list)
+    print(f"Loaded level index: {current_level_index}, Player Health: {initial_player_health}, Position: {initial_player_pos_tuple}")
+else:
+    print("No save data found or error loading. Starting new game.")
+    current_level_index = 0 # Explicitly set for new game
+    initial_player_inventory = []
+    initial_player_health = PLAYER_MAX_HEALTH
+    # initial_player_pos_tuple remains default
+
+# Create a player instance
+player_width = 50
+player_height = 50
+# Player initial position is set by initial_player_pos_tuple
+# SoundManager instance needs to be created before Player if Player __init__ expects it.
+# Assuming sound_manager is globally available or passed if needed by Player constructor.
+# The Player constructor from previous steps is: def __init__(self, x, y, width, height, color, sound_manager):
+# So, sound_manager must be defined before Player.
+sound_manager = SoundManager() # Assuming SoundManager is defined or imported
+player = Player(initial_player_pos_tuple[0], initial_player_pos_tuple[1], player_width, player_height, WHITE, sound_manager)
+
+# Apply loaded health and inventory if data was loaded
+if loaded_data:
+    player.health = initial_player_health
+    player.inventory = initial_player_inventory
+    # Player position is already set by passing initial_player_pos_tuple to constructor
+
+# Initial level load - now load_level will also save this initial state for the loaded level
 load_level(current_level_index, player, monsters, LEVEL_CONFIGS, platforms)
 
 
