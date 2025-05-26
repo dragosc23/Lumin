@@ -1,5 +1,6 @@
 import pygame
 import math
+import config # Import the config file
 
 class BaseMonster:
     def __init__(self, x, y, width, height, color, health, attack_damage, attack_range, attack_cooldown, speed, gravity_val=0, screen_height_val=0):
@@ -15,7 +16,7 @@ class BaseMonster:
         
         # For hit flash effect
         self.is_hit = False
-        self.hit_flash_duration = 10  # frames
+        self.hit_flash_duration = config.MONSTER_HIT_FLASH_DURATION  # Use from config
         self.hit_flash_timer = 0
         
         # Attributes to be initialized by subclasses if they use specific movement patterns

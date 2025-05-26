@@ -1,78 +1,107 @@
 import pygame
+import os # For joining paths if used internally, though paths are passed in
 
 class SoundManager:
     def __init__(self):
+        self.mixer_initialized = False
+        self.sounds = {}
+        self.music_playing = False
         try:
             pygame.mixer.init()
-            self.sounds = {}
-            self.music_playing = False
-            print("SoundManager initialized successfully.")
+            self.mixer_initialized = True
+            print("SoundManager: pygame.mixer initialized successfully.")
         except pygame.error as e:
-            print(f"Error initializing pygame.mixer: {e}")
-            print("SoundManager will be disabled (no sounds or music).")
-            # Fallback: disable methods if mixer failed to init
-            self.play_sound = lambda sound_name: None
-            self.load_sound = lambda sound_name, file_path: None
-            self.play_music = lambda file_path, loops=-1: None
-            self.stop_music = lambda: None
-
+            print(f"SoundManager Error: Failed to initialize pygame.mixer: {e}")
+            print("SoundManager: All sound and music methods will be disabled.")
 
     def load_sound(self, sound_name, file_path):
-        # In a real scenario, you'd load the sound file here:
-        # try:
-        #     sound = pygame.mixer.Sound(file_path)
-        #     self.sounds[sound_name] = sound
-        #     print(f"Loaded sound: {sound_name} from {file_path}")
-        # except pygame.error as e:
-        #     print(f"Error loading sound {sound_name} from {file_path}: {e}")
-        print(f"DEBUG: Conceptually loading sound '{sound_name}' from '{file_path}'")
-        self.sounds[sound_name] = file_path # Store path for now for debug
+        if not self.mixer_initialized:
+            return
+        try:
+            sound = pygame.mixer.Sound(file_path)
+            self.sounds[sound_name] = sound
+            print(f"SoundManager: Loaded sound '{sound_name}' from '{file_path}'")
+        except pygame.error as e:
+            print(f"SoundManager Error: Loading sound '{sound_name}' from '{file_path}': {e}")
+        except FileNotFoundError:
+            print(f"SoundManager Error: Sound file not found for '{sound_name}' at '{file_path}'")
 
     def play_sound(self, sound_name):
-        # In a real scenario, you'd play the loaded sound:
-        # if sound_name in self.sounds:
-        #     self.sounds[sound_name].play()
-        # else:
-        #     print(f"Sound '{sound_name}' not found.")
-        if hasattr(self, 'sounds') and sound_name in self.sounds:
-            print(f"DEBUG: Playing sound: {sound_name} (path: {self.sounds[sound_name]})")
+        if not self.mixer_initialized:
+            return
+        if sound_name in self.sounds:
+            try:
+                self.sounds[sound_name].play()
+                # print(f"SoundManager: Playing sound: {sound_name}") # Can be too verbose
+            except pygame.error as e:
+                print(f"SoundManager Error: Playing sound '{sound_name}': {e}")
         else:
-            # This case handles if mixer init failed or sound not loaded
-            if not hasattr(self, 'sounds'): # Mixer init failed
-                 pass # Method was replaced by lambda, no print needed here
-            else: # Sound not loaded
-                 print(f"DEBUG: Sound '{sound_name}' not loaded/found.")
+            print(f"SoundManager Warning: Sound '{sound_name}' not found/loaded.")
 
-
-    def play_music(self, file_path, loops=-1):
-        # In a real scenario:
-        # try:
-        #     pygame.mixer.music.load(file_path)
-        #     pygame.mixer.music.play(loops)
-        #     self.music_playing = True
-        #     print(f"Playing music: {file_path}")
-        # except pygame.error as e:
-        #     print(f"Error playing music {file_path}: {e}")
-        print(f"DEBUG: Playing music from '{file_path}' with loops={loops}")
-        self.music_playing = True
+    def play_music(self, file_path, loops=-1, volume=0.5):
+        if not self.mixer_initialized:
+            return
+        try:
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.set_volume(volume)
+            pygame.mixer.music.play(loops)
+            self.music_playing = True
+            print(f"SoundManager: Playing music from '{file_path}'")
+        except pygame.error as e:
+            print(f"SoundManager Error: Playing music from '{file_path}': {e}")
+        except FileNotFoundError:
+            print(f"SoundManager Error: Music file not found at '{file_path}'")
 
     def stop_music(self):
-        # In a real scenario:
-        # pygame.mixer.music.stop()
-        # self.music_playing = False
-        print("DEBUG: Stopping music.")
-        self.music_playing = False
+        if not self.mixer_initialized or not self.music_playing:
+            return
+        try:
+            pygame.mixer.music.stop()
+            self.music_playing = False
+            print("SoundManager: Music stopped.")
+        except pygame.error as e:
+            print(f"SoundManager Error: Stopping music: {e}")
 
+    def set_music_volume(self, volume):
+        if not self.mixer_initialized:
+            return
+        try:
+            # Clamp volume between 0.0 and 1.0
+            clamped_volume = max(0.0, min(1.0, volume))
+            pygame.mixer.music.set_volume(clamped_volume)
+            # print(f"SoundManager: Music volume set to {clamped_volume}")
+        except pygame.error as e:
+            print(f"SoundManager Error: Setting music volume: {e}")
+
+
+# Example usage (for testing - this part won't be in the final file if run by main)
 if __name__ == '__main__':
-    # Basic test
-    pygame.init() # Pygame needs to be initialized for mixer to work if run standalone
-    sm = SoundManager()
-    if hasattr(sm, 'sounds'): # Check if mixer initialized properly
-        sm.load_sound("test_ping", "sounds/ping.wav") # Conceptual path
-        sm.play_sound("test_ping")
-        sm.play_sound("non_existent_sound")
-        sm.play_music("music/background.mp3")
-        print(f"Music playing: {sm.music_playing}")
-        sm.stop_music()
-        print(f"Music playing: {sm.music_playing}")
+    pygame.init() # Initialize main pygame module first
+    screen = pygame.display.set_mode([200, 200]) # Mixer needs a display context sometimes
+
+    print("Testing SoundManager with actual Pygame mixer...")
+    sound_mgr = SoundManager()
+
+    if sound_mgr.mixer_initialized:
+        # Create dummy sound files for testing if they don't exist
+        # This part is tricky in a sandboxed env; assume files would exist in local dev.
+        print("\nNOTE: For local testing, create dummy .wav/.ogg files in ./assets subdirs or expect errors.")
+        DUMMY_SOUNDS_DIR = 'assets/sounds'
+        DUMMY_MUSIC_DIR = 'assets/music'
+        if not os.path.exists(DUMMY_SOUNDS_DIR):
+            os.makedirs(DUMMY_SOUNDS_DIR)
+        if not os.path.exists(DUMMY_MUSIC_DIR):
+            os.makedirs(DUMMY_MUSIC_DIR)
+
+        # Example: sound_mgr.load_sound("test_effect", "assets/sounds/dummy_effect.wav")
+        # sound_mgr.play_sound("test_effect")
+
+        # Example: sound_mgr.play_music("assets/music/dummy_theme.ogg")
+        # pygame.time.wait(2000) # Wait for 2 seconds
+        # sound_mgr.stop_music()
+        print("\nSoundManager test finished. If no errors about missing files, good.")
+        print("If you saw 'File not found' errors, that's expected if dummy files aren't present.")
+    else:
+        print("\nSoundManager mixer failed to initialize. Sound tests skipped.")
+
     pygame.quit()

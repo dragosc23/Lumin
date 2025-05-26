@@ -1,30 +1,50 @@
 import pygame
+import config # Import the config file
 
 class Pet:
-    def __init__(self, x, y, width, height, color, owner):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.color = color
-        self.owner = owner  # This will be the player instance
-        self.speed = 3
-        self.health = 50
-        self.attack_damage = 2
-        self.attack_range = 40
-        self.attack_cooldown = 120  # e.g., 2 seconds at 60FPS
+    def __init__(self, x, y, width, height, color, owner, sound_manager=None): # Added sound_manager
+        self.rect = pygame.Rect(x, y, width, height) # Width and height from Player for now
+        self.owner = owner
+        self.sound_manager = sound_manager # Store the sound manager
+
+        # Stats from config
+        self.speed = config.PET_SPEED
+        self.health = config.PET_HEALTH
+        self.attack_damage = config.PET_ATTACK_DAMAGE
+        self.attack_range = config.PET_ATTACK_RANGE
+        self.attack_cooldown = config.PET_ATTACK_COOLDOWN
+        self.follow_distance = config.PET_FOLLOW_DISTANCE
+
         self.last_attack_time = 0
+        
+        # For hit flash effect
+        self.original_color = color # Color passed from Player (ideally config.PET_COLOR)
+        self.color = color # Current color
+        self.is_hit = False
+        self.hit_flash_duration = config.PET_HIT_FLASH_DURATION
+        self.hit_flash_timer = 0
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect)
+    def draw(self, surface): # Renamed screen to surface for consistency
+        current_color = self.original_color 
+        if self.is_hit and self.hit_flash_timer > 0:
+            current_color = config.HIT_COLOR 
+            self.hit_flash_timer -= 1
+        elif self.is_hit and self.hit_flash_timer <= 0: # Check if is_hit was true and timer just ran out
+            self.is_hit = False # Reset is_hit state
+            # self.color = self.original_color # No longer needed as current_color handles it
 
-    def update(self, platforms, monsters, player): # Added monsters and player parameters
-        # --- Follow Logic (from previous subtask) ---
-        follow_distance = 50  # How far the pet tries to stay from the player
+        pygame.draw.rect(surface, current_color, self.rect)
+
+    def update(self, platforms, monsters, player): 
+        # --- Follow Logic ---
+        # Using self.follow_distance now
         dx_to_owner = self.owner.rect.centerx - self.rect.centerx
         dy_to_owner = self.owner.rect.centery - self.rect.centery
         dist_to_owner = (dx_to_owner**2 + dy_to_owner**2)**0.5
-        if dist_to_owner == 0:
-            dist_to_owner = 0.0001
+        if dist_to_owner == 0: # Avoid division by zero if pet is exactly on owner
+            dist_to_owner = 0.0001 
 
-        if dist_to_owner > follow_distance:
+        if dist_to_owner > self.follow_distance:
             norm_dx = dx_to_owner / dist_to_owner
             norm_dy = dy_to_owner / dist_to_owner
             old_rect = self.rect.copy()
