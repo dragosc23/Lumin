@@ -3,64 +3,82 @@ from src.ui_elements import Button # Assuming Button is in ui_elements.py
 import os # Standard practice to import at the top
 import math # For Flyer's vertical bobbing in GameplayScreen's conceptual _load_level_logic
 
+import pygame
+import config # Import config
+from src.ui_elements import Button
+import os
+import math
+import random # Added for loot drop chance
+
+from src.items import create_item_from_dict # For creating item instances from drops
+
+# Note: The BaseScreen in the provided code uses game_manager for screen, fonts, colors.
+# This refactoring will assume game_manager provides these, initialized from config.
+# The screen classes will directly use config for values not expected to change dynamically
+# or not part of the game_manager's direct responsibility (like specific screen bg colors).
+
 class BaseScreen:
     def __init__(self, game_manager):
-        self.game_manager = game_manager # To interact with main game logic (e.g., change state, access managers)
+        self.game_manager = game_manager
+        self.screen = game_manager.screen # Convenience
+        self.ui_font = game_manager.ui_font # Standard UI font from Game
+        self.title_font = game_manager.title_font # Title font from Game
+        self.sound_manager = game_manager.sound_manager
 
-    def handle_events(self, events):
-        """Process all events from the Pygame event queue."""
+    def handle_event(self, event): # Changed from handle_events to match Game's loop
+        """Process a single event."""
         pass
 
     def update(self, dt):
         """Update game state for this screen. dt is delta time in seconds."""
         pass
 
-    def render(self, surface):
+    def draw(self): # Changed from render(surface) to draw(), surface is self.screen
         """Draw everything on this screen."""
         pass
 
 
 class MainMenuScreen(BaseScreen):
-    def __init__(self, game_manager):
+    def __init__(self, screen_surface, game_manager, font_object): # Matching Game's instantiation
         super().__init__(game_manager)
-        self.font = self.game_manager.ui_font # Get font from game_manager
-        self.sound_manager = self.game_manager.sound_manager # Get sound_manager
+        # font_object is game_manager.ui_font, already set in BaseScreen
+        # self.font = font_object # This would be game_manager.ui_font
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
-        # Adjusted start_y to dynamically calculate based on number of buttons
+        button_width = 250 # This could be a config value, e.g., config.UI_BUTTON_WIDTH
+        button_height = config.UI_BUTTON_HEIGHT
+        spacing = config.UI_BUTTON_PADDING
+        
         num_buttons = 2
-        if self.game_manager.save_manager and os.path.exists(self.game_manager.save_manager.save_filename):
+        # Check for save file using game_manager's save_manager and config filename
+        if self.game_manager.save_manager and os.path.exists(config.SAVE_GAME_FILENAME):
             num_buttons = 3
         
         total_button_height = (button_height * num_buttons) + (spacing * (num_buttons - 1))
-        start_y = self.game_manager.screen_height // 2 - total_button_height // 2
-
+        start_y = self.screen.get_height() // 2 - total_button_height // 2
 
         self.buttons = []
         current_y = start_y
 
         self.buttons.append(Button(
             text="New Game",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, current_y, button_width, button_height),
-            font=self.font,
-            text_color=(255, 255, 255),
-            button_color=(0, 150, 0),
-            hover_color=(0, 200, 0),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, current_y, button_width, button_height),
+            font=self.ui_font, # Use font from BaseScreen
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
             action=self.game_manager.start_new_game
         ))
         current_y += button_height + spacing
 
-        if self.game_manager.save_manager and os.path.exists(self.game_manager.save_manager.save_filename):
+        if self.game_manager.save_manager and os.path.exists(config.SAVE_GAME_FILENAME):
             self.buttons.append(Button(
                 text="Load Game",
-                rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, current_y, button_width, button_height),
-                font=self.font,
-                text_color=(255, 255, 255),
-                button_color=(0, 0, 150),
-                hover_color=(0, 0, 200),
+                rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, current_y, button_width, button_height),
+                font=self.ui_font,
+                text_color=config.UI_BUTTON_TEXT_COLOR,
+                button_color=config.UI_BUTTON_COLOR, # Could vary this for different buttons
+                hover_color=config.UI_BUTTON_HOVER_COLOR,
                 sound_manager=self.sound_manager,
                 action=self.game_manager.load_saved_game
             ))
@@ -68,378 +86,454 @@ class MainMenuScreen(BaseScreen):
 
         self.buttons.append(Button(
             text="Quit",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, current_y, button_width, button_height),
-            font=self.font,
-            text_color=(255, 255, 255),
-            button_color=(150, 0, 0),
-            hover_color=(200, 0, 0),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, current_y, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR, # Could vary this
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
             action=self.game_manager.quit_game
         ))
 
-    def handle_events(self, events):
-        for event in events:
-            if event.type == pygame.QUIT: # Allow quitting from menu via window X
-                self.game_manager.quit_game()
-            for button in self.buttons:
-                if button.handle_event(event):
-                    break # Event handled by a button
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.game_manager.quit_game()
+        for button in self.buttons:
+            if button.handle_event(event): # Button itself plays the sound
+                # self.sound_manager.play_sound(config.SOUND_UI_CLICK) # Removed
+                break 
 
     def update(self, dt):
-        pass # Main menu buttons don't have much to update beyond hover state handled by events
+        pass
 
-    def render(self, surface):
-        surface.fill((50, 50, 70)) # Background color for main menu
-        title_font = pygame.font.SysFont("arial", 50) 
-        title_surface = title_font.render("My Autobattler Game", True, (200, 200, 255))
-        title_rect = title_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 4))
-        surface.blit(title_surface, title_rect)
+    def draw(self):
+        self.screen.fill(config.MAIN_MENU_BG_COLOR) 
+        # Use title_font from BaseScreen (initialized from game_manager)
+        # game_manager.draw_text is static, so can be called via class or instance
+        self.game_manager.draw_text(
+            self.screen, "My Autobattler Game", 
+            config.UI_TITLE_FONT_SIZE, # Size from config
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 4, 
+            color=config.WHITE, # Text color from config
+            font_object=self.title_font # Pass the specific font object
+        )
 
         for button in self.buttons:
-            button.draw(surface)
+            button.draw(self.screen)
 
 class PauseScreen(BaseScreen):
-    def __init__(self, game_manager):
+    def __init__(self, screen_surface, game_manager, font_object): # Matching Game's instantiation
         super().__init__(game_manager)
-        self.font = self.game_manager.ui_font 
-        self.title_font = pygame.font.SysFont("arial", 48) 
-        self.sound_manager = self.game_manager.sound_manager
+        # self.font = font_object # game_manager.ui_font, already in BaseScreen.ui_font
+        # self.title_font is game_manager.title_font from BaseScreen
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
-        start_y = self.game_manager.screen_height // 2 - (button_height * 2 + spacing * 1) // 2
+        button_width = 250 # config.UI_BUTTON_WIDTH
+        button_height = config.UI_BUTTON_HEIGHT
+        spacing = config.UI_BUTTON_PADDING
+        start_y = self.screen.get_height() // 2 - (button_height * 2 + spacing * 1) // 2
 
         self.buttons = []
         self.buttons.append(Button(
             text="Resume",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, start_y, button_width, button_height),
-            font=self.font,
-            text_color=(255, 255, 255),
-            button_color=(0, 150, 0),
-            hover_color=(0, 200, 0),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, start_y, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
             action=self.game_manager.resume_game 
         ))
 
         self.buttons.append(Button(
             text="Quit to Main Menu",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, start_y + button_height + spacing, button_width, button_height),
-            font=self.font,
-            text_color=(255, 255, 255),
-            button_color=(150, 0, 0),
-            hover_color=(200, 0, 0),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, start_y + button_height + spacing, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
             action=self.game_manager.go_to_main_menu 
         ))
 
-    def handle_events(self, events):
-        for event in events:
-            if event.type == pygame.QUIT:
-                self.game_manager.quit_game() 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE or event.key == pygame.K_p:
-                    if self.sound_manager: 
-                        self.sound_manager.play_sound("ui_click") 
-                    self.game_manager.resume_game()
-                    return 
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.game_manager.quit_game() 
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE or event.key == pygame.K_p:
+                if self.sound_manager: 
+                    self.sound_manager.play_sound(config.SOUND_UI_CLICK) 
+                self.game_manager.resume_game()
+                return 
 
-            for button in self.buttons:
-                if button.handle_event(event):
-                    break 
+        for button in self.buttons:
+            if button.handle_event(event): # Button itself plays the sound
+                # self.sound_manager.play_sound(config.SOUND_UI_CLICK) # Removed
+                break 
 
     def update(self, dt):
         pass 
 
-    def render(self, surface):
-        overlay = pygame.Surface((self.game_manager.screen_width, self.game_manager.screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180)) 
-        surface.blit(overlay, (0,0)) 
+    def draw(self):
+        # Draw current gameplay screen underneath (optional, if not done by Game class)
+        # For now, Game class fills background then calls screen.draw().
+        # So, GameplayScreen would have drawn. PauseScreen just overlays.
+        
+        overlay = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
+        overlay.fill(config.PAUSE_OVERLAY_COLOR) 
+        self.screen.blit(overlay, (0,0)) 
 
-        paused_text_surface = self.title_font.render("Paused", True, (255, 255, 255))
-        paused_text_rect = paused_text_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 3))
-        surface.blit(paused_text_surface, paused_text_rect)
+        self.game_manager.draw_text(
+            self.screen, "Paused", 
+            config.UI_PAUSED_FONT_SIZE, 
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 3, 
+            color=config.WHITE,
+            font_object=self.title_font # Use larger title font for "Paused"
+        )
 
         for button in self.buttons:
-            button.draw(surface)
+            button.draw(self.screen)
 
 class GameplayScreen(BaseScreen):
-    def __init__(self, game_manager):
+    # Parameters match Game's instantiation of GameplayScreen
+    def __init__(self, screen_surface, game_manager, player, platforms, monsters, font_object):
         super().__init__(game_manager)
-        self.player = self.game_manager.player
-        self.monsters = self.game_manager.monsters_list 
-        self.platforms = self.game_manager.platforms_list
-        self.sound_manager = self.game_manager.sound_manager
-        self.save_manager = self.game_manager.save_manager
-        self.ui_font = self.game_manager.ui_font
-        self.screen_width = self.game_manager.screen_width
-        self.screen_height = self.game_manager.screen_height
+        self.player = player # game_manager.player
+        self.monsters_list = monsters # game_manager.monsters_list
+        self.platforms_list = platforms # game_manager.platforms_list
+        # self.ui_font is from BaseScreen (game_manager.ui_font)
         
-        self.WHITE = self.game_manager.colors.get("WHITE", (255, 255, 255))
-        self.RED = self.game_manager.colors.get("RED", (255, 0, 0))
-        self.GREEN = self.game_manager.colors.get("GREEN", (0, 255, 0))
-        # Assuming HIT_COLOR is also in game_manager.colors or accessible
-        self.HIT_COLOR = self.game_manager.colors.get("HIT_COLOR", (255,100,100))
+        # Colors are accessed via config directly or through game_manager.colors if dynamic
+        # self.HIT_COLOR = config.HIT_COLOR # Direct from config
 
+        # If this screen needs to load/reload level assets, it should use game_manager methods
+        # self._load_level_logic(self.game_manager.current_level_index) # Example: initial load if game starts here
+        # Game.set_game_state for STATE_GAMEPLAY now handles player and asset setup *before* creating GameplayScreen.
+        # GameplayScreen receives them ready.
 
-    def _load_level_logic(self, level_idx):
-        print(f"GameplayScreen: Loading level {level_idx + 1}")
+    # _load_level_logic is mostly moved to Game.load_level_assets and Game.start_new_game/load_saved_game
+    # Monster instantiation details remain a concern for config usage.
 
-        if self.save_manager:
-            save_data_dict = {
-                "current_level_index": level_idx,
-                "player_health": self.game_manager.PLAYER_MAX_HEALTH, 
-                "player_inventory": list(self.player.inventory),
-                "player_position": (self.game_manager.PLAYER_START_X, self.game_manager.PLAYER_START_Y)
-            }
-            self.save_manager.save_data(save_data_dict)
+    def handle_event(self, event): # Changed from handle_events
+        if event.type == pygame.QUIT:
+            self.game_manager.quit_game()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE or event.key == pygame.K_p:
+                self.game_manager.pause_game() # Transition to PauseScreen
+                return 
+            if (event.key == pygame.K_SPACE or event.key == pygame.K_UP) and not self.player.is_jumping:
+                self.player.is_jumping = True
+                self.player.velocity_y = config.JUMP_STRENGTH # Use config
+                if self.player.sound_manager:
+                    self.player.sound_manager.play_sound(config.SOUND_PLAYER_JUMP) # Use config key
+            if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT: # Example attack key
+                self.player.attempt_attack(self.monsters_list)
 
-        self.game_manager.current_level_index = level_idx 
-        self.player.rect.topleft = (self.game_manager.PLAYER_START_X, self.game_manager.PLAYER_START_Y)
-        self.player.health = self.game_manager.PLAYER_MAX_HEALTH
-        self.player.velocity_y = 0
-        self.player.is_jumping = False
-        self.monsters.clear() 
-
-        level_config = self.game_manager.LEVEL_CONFIGS[level_idx]
-        print(level_config["message"])
-
-        monster_spawn_offset_x = 0
-        for monster_group_config in level_config["monsters"]:
-            monster_type_str = monster_group_config["type"]
-            count = monster_group_config["count"]
-            
-            for i in range(count):
-                monster_width = 40
-                monster_height = 40
-                
-                monster_x = 0
-                monster_y = 0
-
-                if self.platforms: 
-                    base_x_on_platform = self.platforms[0].rect.left + 70 
-                    monster_x = base_x_on_platform + i * (monster_width + 80) + monster_spawn_offset_x
-                    monster_y = self.platforms[0].rect.top - monster_height
-                    if monster_x + monster_width > self.platforms[0].rect.right - 20:
-                         monster_x = self.platforms[0].rect.left + 20 + i * 10 + monster_spawn_offset_x
-                else: 
-                    monster_x = 150 + i * 150 + monster_spawn_offset_x
-                    monster_y = self.screen_height - monster_height - 5
-
-                creation_args = monster_group_config.copy()
-                creation_args.pop("type", None) # Remove keys not part of constructor
-                creation_args.pop("count", None)
-                
-                creation_args['x'] = monster_x
-                creation_args['y'] = monster_y
-                
-                # Map config keys to constructor param names if different
-                if "damage" in creation_args:
-                    creation_args["attack_damage"] = creation_args.pop("damage")
-                if "patrol_range" in creation_args:
-                    creation_args["patrol_range_x"] = creation_args.pop("patrol_range")
-                
-                # Add possible_drops from the monster_group_config
-                creation_args['possible_drops'] = monster_group_config.get('drops')
-
-                new_monster = None
-                if monster_type_str == "Grunt":
-                    creation_args['color'] = creation_args.get('color', self.RED)
-                    creation_args['gravity_val'] = self.game_manager.GRAVITY
-                    creation_args['screen_height_val'] = self.screen_height
-                    new_monster = self.game_manager.Grunt(width=monster_width, height=monster_height, **creation_args)
-                elif monster_type_str == "Flyer":
-                    flyer_y_offset = monster_group_config.get("spawn_y_offset", -100) 
-                    creation_args['y'] = self.screen_height // 2 + flyer_y_offset 
-                    creation_args['color'] = creation_args.get('color', self.game_manager.colors.get("YELLOW", (255,255,0)))
-                    new_monster = self.game_manager.Flyer(width=monster_width, height=monster_height, **creation_args)
-                
-                if new_monster:
-                    self.monsters.append(new_monster)
-            monster_spawn_offset_x += count * (monster_width + 80) + 100
-
-
-    def start_level(self, level_idx):
-        self._load_level_logic(level_idx)
-
-    def handle_events(self, events):
-        for event in events:
-            if event.type == pygame.QUIT:
-                self.game_manager.quit_game()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE or event.key == pygame.K_p:
-                    self.game_manager.pause_game()
-                    return 
-                if (event.key == pygame.K_SPACE or event.key == pygame.K_UP) and not self.player.is_jumping:
-                    self.player.is_jumping = True
-                    self.player.velocity_y = self.game_manager.JUMP_STRENGTH
-                    if self.player.sound_manager:
-                        self.player.sound_manager.play_sound("player_jump")
 
         keys = pygame.key.get_pressed()
         player_dx = 0
         if keys[pygame.K_LEFT]:
-            player_dx -= self.player.speed
+            player_dx -= self.player.speed # Player speed already from config via Player class
         if keys[pygame.K_RIGHT]:
             player_dx += self.player.speed
-        self.player.move(player_dx, 0, self.platforms)
+        
+        # Player.move now handles horizontal platform collision
+        self.player.move(player_dx, 0, self.platforms_list)
+
+
+    def update_monsters(self, dt):
+        """Handles monster updates, death, and XP/drop mechanics."""
+        for monster in list(self.monsters_list): # Iterate on a copy if modifying list
+            if monster.health <= 0:
+                # Award XP
+                self.player.gain_xp(config.XP_PER_MONSTER_DEFEAT) # Use config
+                
+                # Handle drops
+                if monster.possible_drops:
+                    for drop_info in monster.possible_drops:
+                        if random.random() < drop_info["chance"]:
+                            item_id = drop_info["item_id"]
+                            quantity = drop_info.get("quantity", 1) # Default to 1 if not specified
+                            
+                            base_item_config = config.GENERIC_ITEM_DEFAULTS.get(item_id)
+                            if not base_item_config:
+                                print(f"Warning: Item ID '{item_id}' not found in GENERIC_ITEM_DEFAULTS.")
+                                continue
+
+                            # Determine the class name for item creation
+                            # This could be stored in GENERIC_ITEM_DEFAULTS or inferred
+                            item_class_name = "Item" # Default to base Item class
+                            if item_id == "HealthPotion": # Specific case
+                                item_class_name = "HealthPotion"
+                            # Add more specific items here if they have their own classes
+                            # Or, better: add "item_class_name" to GENERIC_ITEM_DEFAULTS entries
+
+                            item_data_for_creation = base_item_config.copy()
+                            item_data_for_creation["item_class_name"] = item_class_name 
+                            # name, description, value etc. are already in item_data_for_creation
+
+                            new_item_instance = create_item_from_dict(item_data_for_creation)
+                            
+                            if new_item_instance:
+                                # The add_item method in InventoryManager handles stacking.
+                                # It needs the item instance and the quantity to add.
+                                self.player.inventory.add_item(new_item_instance, quantity)
+                                print(f"Player obtained {quantity}x {new_item_instance.name}!")
+                                if self.sound_manager:
+                                    self.sound_manager.play_sound(config.SOUND_ITEM_PICKUP)
+                            else:
+                                print(f"Warning: Could not create item instance for {item_id}.")
+                
+                self.monsters_list.remove(monster)
+                if self.sound_manager:
+                    self.sound_manager.play_sound(config.SOUND_MONSTER_DEATH) # Use config key
+                print(f"Monster (ID: {id(monster)}) removed.")
+            else:
+                monster.update(self.platforms_list, self.player)
+
 
     def update(self, dt):
-        self.player.update(self.platforms, self.monsters) 
+        self.player.update(self.platforms_list, self.monsters_list) 
         if self.player.pet:
-            self.player.pet.update(self.platforms, self.monsters, self.player)
+            self.player.pet.update(self.platforms_list, self.monsters_list, self.player)
 
-        for monster in list(self.monsters): 
-            monster.update(self.platforms, self.player)
+        self.update_monsters(dt) # Call new monster update method
         
-        new_monsters_list = [m for m in self.monsters if m.health > 0]
-        if len(new_monsters_list) < len(self.monsters):
-             self.monsters[:] = new_monsters_list 
-
-        if not self.monsters and self.player.health > 0:
+        if not self.monsters_list and self.player.health > 0: # Check if all monsters are defeated
             print(f"Level {self.game_manager.current_level_index + 1} cleared!")
             self.game_manager.current_level_index += 1
-            if self.game_manager.current_level_index < len(self.game_manager.LEVEL_CONFIGS):
-                self.start_level(self.game_manager.current_level_index)
+            if self.game_manager.current_level_index < len(config.LEVEL_CONFIGS):
+                # Game manager should handle loading next level's assets and then
+                # potentially re-configuring this screen or transitioning.
+                # For now, let's assume Game.start_new_game or similar would be called by a higher logic
+                # or GameplayScreen tells Game to load next level.
+                self.game_manager.load_level_assets(self.game_manager.current_level_index)
+                # Player position might need resetting by game_manager or here
+                self.player.rect.topleft = (config.PLAYER_START_X, config.PLAYER_START_Y)
+                # If GameplayScreen needs to be "restarted" for the new level data:
+                # self.game_manager.set_game_state(config.STATE_GAMEPLAY) might be one way if it reconstructs.
             else:
                 print("Congratulations! All levels completed!")
-                self.game_manager.set_game_state(self.game_manager.STATE_GAME_WON) 
+                self.game_manager.set_game_state(config.STATE_GAME_WON) 
                 return
 
         if self.player.health <= 0:
             print("Game Over! Player has been defeated.")
-            self.game_manager.set_game_state(self.game_manager.STATE_GAME_OVER) 
+            self.game_manager.set_game_state(config.STATE_GAME_OVER) 
 
-    def render(self, surface):
-        surface.fill((0,0,0)) # Black background (assuming BLACK is (0,0,0) from game_manager or global)
-        for plat in self.platforms:
-            plat.draw(surface)
+    def draw(self):
+        self.screen.fill(config.BLACK) # Use config color
+        for plat in self.platforms_list: # Use the list passed in __init__
+            plat.draw(self.screen)
         
-        # Player and Pet drawing are handled by game_manager if they are part of a sprite group
-        # Or draw them directly if GameplayScreen manages them
-        self.player.draw(surface)
+        self.player.draw(self.screen)
         if self.player.pet:
-            self.player.pet.draw(surface)
+            self.player.pet.draw(self.screen)
 
-        for monster in self.monsters:
-            monster.draw(surface, self.HIT_COLOR)
+        for monster in self.monsters_list: # Use the list passed in __init__
+            monster.draw(self.screen) # Monster.draw now uses config.HIT_COLOR internally
 
         # UI Text (Health, Level, XP, Inventory)
-        player = self.game_manager.player # Convenience reference
-        draw_text_utility = self.game_manager.draw_text_utility # Convenience reference
-        ui_font = self.ui_font # Already available in GameplayScreen
-        white_color = self.game_manager.config.WHITE # Assuming WHITE is in config
-        # If config is not directly on game_manager, adjust access e.g. self.game_manager.config.WHITE
-
+        # game_manager.draw_text is static, can be called via self.game_manager
+        
         # Health
-        # Ensure player.max_health is used, not game_manager.PLAYER_MAX_HEALTH if it can change per player
-        health_text = f"Health: {player.health}/{player.max_health}"
-        draw_text_utility(surface, health_text, ui_font, white_color, 10, 10)
+        health_text = f"Health: {self.player.health}/{self.player.max_health}"
+        self.game_manager.draw_text(self.screen, health_text, config.UI_FONT_SIZE, 10, 10, 
+                                    color=config.WHITE, font_object=self.ui_font)
 
-        # Level (using player.level directly)
-        level_text = f"Level: {player.level}"
-        draw_text_utility(surface, level_text, ui_font, white_color, 10, 40)
+        # Level
+        level_text = f"Level: {self.player.level}"
+        self.game_manager.draw_text(self.screen, level_text, config.UI_FONT_SIZE, 10, 40, 
+                                    color=config.WHITE, font_object=self.ui_font)
 
-        # XP Display (New)
-        xp_text = f"XP: {player.experience_points} / {player.xp_to_next_level}"
+        # XP Display
+        xp_text = f"XP: {self.player.experience_points} / {self.player.xp_to_next_level}"
         xp_text_y_position = 70 
-        draw_text_utility(surface, xp_text, ui_font, white_color, 10, xp_text_y_position)
+        self.game_manager.draw_text(self.screen, xp_text, config.UI_FONT_SIZE, 10, xp_text_y_position, 
+                                    color=config.WHITE, font_object=self.ui_font)
 
-        # Adjusted Inventory Display Logic
-        inventory_y_start = xp_text_y_position + 30 # Shift inventory down to 100
-        line_height = 25       # Height for each line of text (adjust based on font size)
+        # Inventory Display
+        inventory_y_start = xp_text_y_position + 30 
+        line_height = config.UI_FONT_SIZE + 5 # Dynamic line height based on font
 
-        if hasattr(player, 'inventory') and hasattr(player.inventory, 'get_all_items'):
-            item_slots = self.game_manager.player.inventory.get_all_items()
+        if hasattr(self.player, 'inventory') and hasattr(self.player.inventory, 'get_all_items'):
+            item_slots = self.player.inventory.get_all_items()
             
             inventory_title_text = "Inventory:"
-            draw_text_utility(surface, inventory_title_text, ui_font,
-                                                white_color, 10, inventory_y_start)
+            self.game_manager.draw_text(self.screen, inventory_title_text, config.UI_FONT_SIZE,
+                                        10, inventory_y_start, color=config.WHITE, font_object=self.ui_font)
             
             if not item_slots:
-                inventory_empty_text = "  Empty" # Indent "Empty"
-                draw_text_utility(surface, inventory_empty_text, ui_font, 
-                                                    white_color, 10, inventory_y_start + line_height)
+                inventory_empty_text = "  Empty"
+                self.game_manager.draw_text(self.screen, inventory_empty_text, config.UI_FONT_SIZE, 
+                                            10, inventory_y_start + line_height, color=config.WHITE, font_object=self.ui_font)
             else:
                 current_y = inventory_y_start + line_height
-                for slot in item_slots:
+                for slot_idx, slot in enumerate(item_slots):
                     item = slot.get('item')
                     quantity = slot.get('quantity')
                     if item and quantity is not None: 
-                        item_line = f"  - {item.name}: {quantity}" # Indent item list
-                        draw_text_utility(surface, item_line, ui_font, 
-                                                            white_color, 10, current_y)
+                        item_line = f"  {slot_idx+1}. {item.name}: {quantity}" # Numbered list
+                        self.game_manager.draw_text(self.screen, item_line, config.UI_FONT_SIZE, 
+                                                    10, current_y, color=config.WHITE, font_object=self.ui_font)
                         current_y += line_height
-                        if current_y > self.game_manager.screen_height - 20: 
+                        if current_y > self.screen.get_height() - 20: 
                             break 
         else:
-            draw_text_utility(surface, "Inventory: N/A", ui_font,
-                                                self.game_manager.config.RED, 10, inventory_y_start)
+            self.game_manager.draw_text(self.screen, "Inventory: N/A", config.UI_FONT_SIZE,
+                                        10, inventory_y_start, color=config.RED, font_object=self.ui_font)
 
 
 class GameOverScreen(BaseScreen):
-    def __init__(self, game_manager):
+    def __init__(self, screen_surface, game_manager, font_object): # Matching Game's instantiation
         super().__init__(game_manager)
-        self.title_font = pygame.font.SysFont("arial", 72) # Large font for "Game Over"
-        self.button_font = self.game_manager.ui_font # Use standard UI font for buttons
-        self.sound_manager = self.game_manager.sound_manager
-        self.message_font = self.game_manager.ui_font
-        self.message_color = self.game_manager.colors.get("WHITE", (255, 255, 255))
-        self.title_color = self.game_manager.colors.get("RED", (255, 0, 0))
-        self.background_color = (30, 30, 30)
+        # self.title_font is from BaseScreen (game_manager.title_font)
+        # self.button_font is self.ui_font from BaseScreen (game_manager.ui_font)
+        
+        self.message_font = self.ui_font # For "Better luck next time"
+        self.message_color = config.WHITE
+        self.title_color = config.RED
+        self.background_color = config.GAME_OVER_BG_COLOR # From config
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
-        # Buttons are centered below the "Game Over" message
-        start_y = self.game_manager.screen_height // 2 
+        button_width = 250 # config.UI_BUTTON_WIDTH
+        button_height = config.UI_BUTTON_HEIGHT
+        spacing = config.UI_BUTTON_PADDING
+        start_y = self.screen.get_height() // 2 
 
         self.buttons = []
         self.buttons.append(Button(
             text="Try Again",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, start_y, button_width, button_height),
-            font=self.button_font,
-            text_color=(255, 255, 255),
-            button_color=(0, 100, 150), # A bluish color
-            hover_color=(0, 150, 200),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, start_y, button_width, button_height),
+            font=self.ui_font, # Button font is standard UI font
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
-            action=self.game_manager.start_new_game # This will reset and start from level 0
+            action=self.game_manager.start_new_game
         ))
 
         self.buttons.append(Button(
             text="Main Menu",
-            rect=pygame.Rect(self.game_manager.screen_width // 2 - button_width // 2, start_y + button_height + spacing, button_width, button_height),
-            font=self.button_font,
-            text_color=(255, 255, 255),
-            button_color=(100, 100, 100), # A gray color
-            hover_color=(150, 150, 150),
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, start_y + button_height + spacing, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
             sound_manager=self.sound_manager,
             action=self.game_manager.go_to_main_menu 
         ))
 
-    def handle_events(self, events):
-        for event in events:
-            if event.type == pygame.QUIT:
-                self.game_manager.quit_game()
-            for button in self.buttons:
-                if button.handle_event(event):
-                    break # Event handled, no need to process further for this event
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.game_manager.quit_game()
+        for button in self.buttons:
+            if button.handle_event(event): # Button itself plays the sound
+                # self.sound_manager.play_sound(config.SOUND_UI_CLICK) # Removed
+                break
 
     def update(self, dt):
-        # No specific update logic needed for a static game over screen
         pass
 
-    def render(self, surface):
-        surface.fill(self.background_color) 
+    def draw(self):
+        self.screen.fill(self.background_color) 
         
-        game_over_text_surface = self.title_font.render("Game Over", True, self.title_color)
-        game_over_text_rect = game_over_text_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 3))
-        surface.blit(game_over_text_surface, game_over_text_rect)
+        self.game_manager.draw_text(
+            self.screen, "Game Over", 
+            config.UI_GAME_OVER_FONT_SIZE, 
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 3, 
+            color=self.title_color,
+            font_object=self.game_manager.title_font # Use the larger title font from game_manager
+        )
 
-        # Optional: A sub-message
-        sub_message_surface = self.message_font.render("Better luck next time!", True, self.message_color)
-        sub_message_rect = sub_message_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 3 + 60))
-        surface.blit(sub_message_surface, sub_message_rect)
+        self.game_manager.draw_text(
+            self.screen, "Better luck next time!", 
+            config.UI_SUBTITLE_FONT_SIZE, # Subtitle size
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 3 + config.UI_GAME_OVER_FONT_SIZE // 2 + 10, # Position below title
+            color=self.message_color,
+            font_object=self.ui_font # Regular UI font for subtitle
+        )
 
         for button in self.buttons:
-            button.draw(surface)
+            button.draw(self.screen)
+
+class GameWonScreen(BaseScreen): # New Screen
+    def __init__(self, screen_surface, game_manager, font_object):
+        super().__init__(game_manager)
+        self.message_font = self.ui_font
+        self.message_color = config.WHITE
+        self.title_color = config.GREEN # Green for winning
+        self.background_color = config.GAME_WON_BG_COLOR
+
+        button_width = 250 # config.UI_BUTTON_WIDTH
+        button_height = config.UI_BUTTON_HEIGHT
+        spacing = config.UI_BUTTON_PADDING
+        
+        # Position buttons: Play Again above Main Menu
+        total_buttons_height = (button_height * 2) + spacing
+        start_y = self.screen.get_height() // 2 + 50 # Start buttons lower to make space for title
+        
+        self.buttons = []
+
+        # Play Again Button
+        play_again_button_y = start_y
+        self.buttons.append(Button(
+            text="Play Again",
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, play_again_button_y, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
+            sound_manager=self.sound_manager,
+            action=self.game_manager.start_new_game # Action to start a new game
+        ))
+
+        # Main Menu Button
+        main_menu_button_y = play_again_button_y + button_height + spacing
+        self.buttons.append(Button(
+            text="Main Menu",
+            rect=pygame.Rect(self.screen.get_width() // 2 - button_width // 2, main_menu_button_y, button_width, button_height),
+            font=self.ui_font,
+            text_color=config.UI_BUTTON_TEXT_COLOR,
+            button_color=config.UI_BUTTON_COLOR,
+            hover_color=config.UI_BUTTON_HOVER_COLOR,
+            sound_manager=self.sound_manager,
+            action=self.game_manager.go_to_main_menu
+        ))
+
+
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.game_manager.quit_game()
+        for button in self.buttons:
+            if button.handle_event(event): # Button itself plays the sound
+                # self.sound_manager.play_sound(config.SOUND_UI_CLICK) # Removed
+                break # Event handled
+
+    def update(self, dt):
+        pass
+
+    def draw(self):
+        self.screen.fill(self.background_color)
+        
+        self.game_manager.draw_text(
+            self.screen, "You Won!", 
+            config.UI_GAME_OVER_FONT_SIZE, # Same large size as Game Over
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 3, 
+            color=self.title_color,
+            font_object=self.game_manager.title_font # Use large title font
+        )
+
+        self.game_manager.draw_text(
+            self.screen, "Congratulations!", 
+            config.UI_SUBTITLE_FONT_SIZE, 
+            self.screen.get_width() // 2, 
+            self.screen.get_height() // 3 + config.UI_GAME_OVER_FONT_SIZE // 2 + 10, 
+            color=self.message_color,
+            font_object=self.ui_font
+        )
+        for button in self.buttons:
+            button.draw(self.screen)
