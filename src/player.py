@@ -22,11 +22,17 @@ class Player:
         self.velocity_y = 0
         self.is_jumping = False
         # This will become config.PLAYER_MAX_HEALTH in the next step
-        self.health = config.PLAYER_MAX_HEALTH # Updated to use config for now, assuming it's available
-        self.attack_range = 75 # To be config.PLAYER_ATTACK_RANGE
-        self.attack_damage = 10 # To be config.PLAYER_ATTACK_DAMAGE
-        self.attack_cooldown = 60 # To be config.PLAYER_ATTACK_COOLDOWN
+        self.max_health = config.PLAYER_MAX_HEALTH 
+        self.health = self.max_health 
+        self.attack_range = config.PLAYER_ATTACK_RANGE 
+        self.attack_damage = config.PLAYER_ATTACK_DAMAGE 
+        self.attack_cooldown = config.PLAYER_ATTACK_COOLDOWN 
         self.last_attack_time = 0
+
+        # XP and Leveling attributes
+        self.level = 1
+        self.experience_points = 0
+        self.xp_to_next_level = config.XP_PER_LEVEL_BASE * self.level
         
         self.inventory = InventoryManager(capacity=config.PLAYER_INVENTORY_CAPACITY)
         
@@ -152,11 +158,15 @@ class Player:
                     if monster.health <= 0:
                         if self.sound_manager:
                             self.sound_manager.play_sound("monster_die")
+                        
+                        # Award XP for defeating the monster
+                        self.gain_xp(config.XP_PER_MONSTER_DEFEAT)
+
                         # Item creation and adding logic is now moved to GameplayScreen.update
-                        print(f"Monster (ID: {id(monster)}) defeated by player.") 
+                        print(f"Monster (ID: {id(monster)}) defeated by player.")
                         
                     self.last_attack_time = 0
-                    attack_occurred = True 
+                    attack_occurred = True
                     break 
             
             if attack_occurred: 
@@ -169,3 +179,26 @@ class Player:
             self.attack_visual_timer -= 1
             if self.attack_visual_timer <= 0:
                 self.is_attacking = False
+
+    def gain_xp(self, amount):
+        self.experience_points += amount
+        print(f"Player gained {amount} XP. Total XP: {self.experience_points}/{self.xp_to_next_level}")
+        self.check_for_level_up()
+
+    def check_for_level_up(self):
+        while self.experience_points >= self.xp_to_next_level:
+            self.level += 1
+            # Carry over excess XP: subtract the cost of the level just completed
+            self.experience_points -= self.xp_to_next_level 
+            
+            # Update xp_to_next_level for the NEW level
+            self.xp_to_next_level = config.XP_PER_LEVEL_BASE * self.level 
+            
+            # Apply level-up benefits
+            self.max_health += config.HEALTH_GAIN_PER_LEVEL
+            self.health = self.max_health # Heal to new max health
+            
+            if self.sound_manager:
+                self.sound_manager.play_sound("level_up") # Assuming a 'level_up' sound exists
+            print(f"Player reached Level {self.level}! Max health increased to {self.max_health}. XP for next level: {self.xp_to_next_level}.")
+            # If experience_points is still >= new xp_to_next_level, the loop continues

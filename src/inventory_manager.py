@@ -107,9 +107,50 @@ class InventoryManager:
         items_str = ", ".join([f"{slot['item'].name}({slot['quantity']})" for slot in self.slots])
         return f"Inventory ({len(self.slots)}/" + str(self.capacity) + f" slots): {items_str}"
 
+    def get_serializable_data(self):
+        """
+        Returns a list of dictionaries representing the inventory slots,
+        suitable for JSON serialization.
+        """
+        serializable_slots = []
+        for slot in self.slots:
+            serializable_slots.append({
+                "item_data": slot['item'].to_dict(), # Uses the item's own serialization method
+                "quantity": slot['quantity']
+            })
+        return serializable_slots
+
+    def load_from_serializable_data(self, data_list):
+        """
+        Clears the current inventory and repopulates it from a list of
+        serialized slot data.
+        Requires `create_item_from_dict` from `src.items`.
+        """
+        from src.items import create_item_from_dict # Local import to avoid circular dependencies at module level if any
+
+        self.slots.clear()
+        if data_list is None: # Handle cases where inventory data might be missing
+            print("DEBUG: No inventory data provided to load.")
+            return
+
+        for slot_data in data_list:
+            item_dict = slot_data.get("item_data")
+            quantity = slot_data.get("quantity")
+
+            if item_dict and quantity is not None:
+                item_instance = create_item_from_dict(item_dict)
+                if item_instance:
+                    # The add_item method handles stacking and new slots correctly.
+                    # It expects an item instance and quantity.
+                    self.add_item(item_instance, quantity)
+                else:
+                    print(f"Warning: Failed to create item from data: {item_dict}")
+            else:
+                print(f"Warning: Invalid slot data encountered: {slot_data}")
+
 
 if __name__ == '__main__':
-    from items import Item, ConsumableItem, HealthPotion # For testing
+    from items import Item, ConsumableItem, HealthPotion, create_item_from_dict # For testing
 
     print("Testing InventoryManager...")
     inv_manager = InventoryManager(capacity=5)
@@ -137,6 +178,24 @@ if __name__ == '__main__':
     added_stone = inv_manager.add_item(stone, 1) # Should fail if inventory is full (5 slots used: HP, MP, Sword, HP, MP)
     print(f"Attempted to add stone: {added_stone}")
     print(inv_manager)
+
+    print("\n--- Testing Serialization ---")
+    serialized_inventory = inv_manager.get_serializable_data()
+    print("Serialized Inventory:")
+    import json
+    print(json.dumps(serialized_inventory, indent=2))
+
+    print("\n--- Testing Deserialization ---")
+    # Simulate clearing and loading
+    inv_manager_new = InventoryManager(capacity=5)
+    inv_manager_new.load_from_serializable_data(serialized_inventory)
+    print("New Inventory after loading:")
+    print(inv_manager_new)
+    
+    # Verify counts in the new inventory
+    print(f"New Inv: Health Potion count: {inv_manager_new.get_item_count('Health Potion')}") # Expected 13
+    print(f"New Inv: Monster Part count: {inv_manager_new.get_item_count('Monster Part')}")   # Expected 25
+    print(f"New Inv: Basic Sword count: {inv_manager_new.get_item_count('Basic Sword')}")     # Expected 1
 
     print("\nChecking items...")
     print(f"Has Health Potion (1)?: {inv_manager.has_item('Health Potion', 1)}")

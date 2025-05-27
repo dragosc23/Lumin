@@ -17,6 +17,9 @@ PLAYER_ATTACK_COOLDOWN = 60 # In frames
 PLAYER_HIT_FLASH_DURATION = 10 # In frames
 PLAYER_ATTACK_VISUAL_DURATION = 7 # In frames
 PLAYER_INVENTORY_CAPACITY = 16 # Max number of item STACKS
+XP_PER_LEVEL_BASE = 100      # Base XP needed for each level (e.g., level 1 needs 100, level 2 needs 200)
+XP_PER_MONSTER_DEFEAT = 25   # XP awarded for defeating a common monster
+HEALTH_GAIN_PER_LEVEL = 20   # How much max_health increases per level
 
 # Colors (RGB)
 WHITE = (255, 255, 255)
