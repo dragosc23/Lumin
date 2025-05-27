@@ -28,8 +28,12 @@ PLAYER_START_Y = SCREEN_HEIGHT - 70 # Assuming player height is around 50
 PLAYER_MAX_HEALTH = 200
 
 # Import monster classes
-from monster import BaseMonster, Grunt, Flyer
-from src.save_manager import SaveManager # Import SaveManager
+from monster import BaseMonster, Grunt, Flyer # These are used by GameplayScreen via game_manager_proxy
+from src.save_manager import SaveManager
+from src.sound_manager import SoundManager # Ensure this is imported before use
+from src.player import Player # Import Player class
+# from src.screens import MainMenuScreen, GameplayScreen, PauseScreen, GameOverScreen, GameWonScreen # For screen management
+# from src.ui_elements import Button # Used by screens
 
 LEVEL_CONFIGS = [
     {
@@ -67,170 +71,7 @@ def draw_text(surface, text, font, color, x, y):
     surface.blit(text_surface, text_rect)
     return text_rect # Optional: return rect for positioning or interaction
 
-# Player class
-class Player:
-    def __init__(self, x, y, width, height, color):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.color = color
-        self.speed = 5
-        self.velocity_y = 0
-        self.is_jumping = False
-        self.health = PLAYER_MAX_HEALTH # Use constant
-        self.attack_range = 75
-        self.attack_damage = 10
-        self.attack_cooldown = 60 # Frames (1 attack per second at 60FPS)
-        self.last_attack_time = 0
-        self.inventory = [] # Player inventory
-        
-        # Damage flash attributes for Player
-        self.original_color = self.color 
-        self.is_hit = False
-        self.hit_flash_duration = 10
-        self.hit_flash_timer = 0
-
-        # Attack visual attributes for Player
-        self.is_attacking = False
-        self.attack_visual_duration = 7 # frames
-        self.attack_visual_timer = 0
-        self.direction = 1 # 1 for right, -1 for left
-
-        # Create the pet instance, positioning it relative to the player
-        # Pet color is BLUE (0,0,255)
-        self.pet = Pet(self.rect.x - 50, self.rect.y, 20, 20, (0, 0, 255), self)
-
-
-    def draw(self, screen):
-        # Player damage flash
-        current_player_color = self.original_color
-        if self.is_hit and self.hit_flash_timer > 0:
-            current_player_color = HIT_COLOR
-            self.hit_flash_timer -= 1
-        else: # Reset if timer is done (or wasn't hit)
-            self.is_hit = False 
-        
-        if self.hit_flash_timer <= 0: # Additional check as per subtask
-            self.is_hit = False
-            self.color = self.original_color # Ensure player's self.color is reset
-
-        pygame.draw.rect(screen, current_player_color, self.rect)
-
-        # Player attack visual
-        if self.is_attacking:
-            attack_rect_width = 30
-            attack_rect_height = self.rect.height * 0.8
-            attack_rect_y = self.rect.centery - attack_rect_height / 2
-            if self.direction == 1: # Facing right
-                attack_rect_x = self.rect.right
-            else: # Facing left
-                attack_rect_x = self.rect.left - attack_rect_width
-            attack_visual_rect = pygame.Rect(attack_rect_x, attack_rect_y, attack_rect_width, attack_rect_height)
-            pygame.draw.rect(screen, ATTACK_VISUAL_COLOR, attack_visual_rect)
-
-
-    def move(self, dx, dy, platforms):
-        # Update player direction based on horizontal movement
-        if dx > 0:
-            self.direction = 1
-        elif dx < 0:
-            self.direction = -1
-
-        # Move horizontally
-        self.rect.x += dx
-        # Check for horizontal collisions
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if dx > 0:  # Moving right
-                    self.rect.right = platform.rect.left
-                elif dx < 0:  # Moving left
-                    self.rect.left = platform.rect.right
-        
-        # Move vertically
-        old_rect_bottom = self.rect.bottom # Player's bottom before this vertical move
-        old_rect_top = self.rect.top       # Player's top before this vertical move
-        self.rect.y += dy                  # Apply vertical movement (dy is self.velocity_y from update)
-        
-        # Check for vertical collisions
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if dy > 0:  # Player is moving down (dy is positive velocity_y)
-                    # Check if player was above or at the platform's top before this move
-                    if old_rect_bottom <= platform.rect.top:
-                        self.rect.bottom = platform.rect.top
-                        self.velocity_y = 0
-                        self.is_jumping = False
-                elif dy < 0:  # Player is moving up (dy is negative velocity_y)
-                    # Check if player was below or at the platform's bottom before this move
-                    if old_rect_top >= platform.rect.bottom:
-                        self.rect.top = platform.rect.bottom
-                        self.velocity_y = 0 # Stop upward movement
-
-        # Screen boundary checks for X-axis
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > SCREEN_WIDTH:
-            self.rect.right = SCREEN_WIDTH
-        
-        # Screen boundary checks for Y-axis (simple top boundary)
-        # Note: Hitting underside of platform is handled above, this handles screen top
-        if self.rect.top < 0:
-            self.rect.top = 0
-            # Only reset velocity if not already handled by platform collision
-            if dy < 0: # If moving up when hitting screen top
-                 self.velocity_y = 0
-
-
-    def update(self, platforms, monsters): # Added monsters parameter
-        # Apply gravity
-        self.velocity_y += GRAVITY
-        if self.velocity_y > 15: # Terminal velocity (optional)
-            self.velocity_y = 15
-        
-        # Move the player vertically (and check for vertical platform collisions)
-        self.move(0, self.velocity_y, platforms)
-
-        # Ground collision (fallback)
-        if self.rect.bottom >= SCREEN_HEIGHT:
-            self.rect.bottom = SCREEN_HEIGHT
-            self.velocity_y = 0
-            self.is_jumping = False
-
-        # Player Attack Logic
-        self.last_attack_time += 1
-        if self.last_attack_time >= self.attack_cooldown:
-            # Attempt to attack
-            attack_occurred = False
-            for monster in monsters:
-                effective_attack_rect = self.rect.inflate(self.attack_range, self.attack_range)
-                # Adjust effective_attack_rect based on player direction for more precise visual correlation
-                # This is optional, current logic uses a general circular/square range
-                # For simplicity, we keep the inflated rect centered on the player for range check.
-
-                if effective_attack_rect.colliderect(monster.rect):
-                    monster.health -= self.attack_damage
-                    # Trigger monster's hit flash
-                    monster.is_hit = True
-                    monster.hit_flash_timer = monster.hit_flash_duration
-                    print(f"Player attacked monster (ID: {id(monster)}). Monster health: {monster.health}")
-                    
-                    if monster.health <= 0:
-                        print(f"Monster (ID: {id(monster)}) defeated! It dropped a 'Monster Part'.")
-                        self.inventory.append("Monster Part")
-                        print(f"Player inventory: {self.inventory}")
-                        
-                    self.last_attack_time = 0
-                    attack_occurred = True # Mark that an attack happened
-                    break 
-            
-            if attack_occurred: # If an attack was made
-                self.is_attacking = True
-                self.attack_visual_timer = self.attack_visual_duration
-        
-        # Update attack visual timer
-        if self.is_attacking:
-            self.attack_visual_timer -= 1
-            if self.attack_visual_timer <= 0:
-                self.is_attacking = False
-# Platform class (Monster class has been moved to monster.py)
+# Platform class (Player class has been moved to src/player.py, Monster class to src/monster.py)
 class Platform: 
     def __init__(self, x, y, width, height, color):
         self.rect = pygame.Rect(x, y, width, height)
@@ -354,8 +195,9 @@ player_height = 50
 # Assuming sound_manager is globally available or passed if needed by Player constructor.
 # The Player constructor from previous steps is: def __init__(self, x, y, width, height, color, sound_manager):
 # So, sound_manager must be defined before Player.
-sound_manager = SoundManager() # Assuming SoundManager is defined or imported
-player = Player(initial_player_pos_tuple[0], initial_player_pos_tuple[1], player_width, player_height, WHITE, sound_manager)
+# sound_manager = SoundManager() # This is now instantiated in the game_manager_proxy setup
+# player = Player(initial_player_pos_tuple[0], initial_player_pos_tuple[1], player_width, player_height, WHITE, sound_manager)
+# Player is now also part of game_manager_proxy and instantiated there.
 
 # Apply loaded health and inventory if data was loaded
 if loaded_data:

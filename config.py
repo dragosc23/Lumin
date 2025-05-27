@@ -16,6 +16,7 @@ PLAYER_ATTACK_RANGE = 75
 PLAYER_ATTACK_COOLDOWN = 60 # In frames
 PLAYER_HIT_FLASH_DURATION = 10 # In frames
 PLAYER_ATTACK_VISUAL_DURATION = 7 # In frames
+PLAYER_INVENTORY_CAPACITY = 16 # Max number of item STACKS
 
 # Colors (RGB)
 WHITE = (255, 255, 255)
@@ -47,6 +48,9 @@ MONSTER_HIT_FLASH_DURATION = 10 # In frames
 # Game Physics & Mechanics
 GRAVITY = 1
 JUMP_STRENGTH = -20
+
+# Item Defaults
+DEFAULT_ITEM_MAX_STACK = 20 # Default max stack for generic items if not specified
 
 
 # Default Monster Stats (base values, can be overridden by LEVEL_CONFIGS)
