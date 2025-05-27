@@ -16,18 +16,17 @@ from src.items import Item # Import Item for creating item instances
 class Player:
     def __init__(self, x, y, width, height, color, sound_manager=None): # Added sound_manager
         self.rect = pygame.Rect(x, y, width, height)
-        self.color = color 
-        # Stats and properties from config (or defaults if config not used yet)
-        self.speed = 5 # To be config.PLAYER_SPEED
+        self.color = color
+        # Stats and properties from config
+        self.speed = config.PLAYER_SPEED
         self.velocity_y = 0
         self.is_jumping = False
-        # This will become config.PLAYER_MAX_HEALTH in the next step
-        self.max_health = config.PLAYER_MAX_HEALTH 
-        self.health = self.max_health 
-        self.attack_range = config.PLAYER_ATTACK_RANGE 
-        self.attack_damage = config.PLAYER_ATTACK_DAMAGE 
-        self.attack_cooldown = config.PLAYER_ATTACK_COOLDOWN 
-        self.last_attack_time = 0
+        self.max_health = config.PLAYER_MAX_HEALTH
+        self.health = self.max_health
+        self.attack_range = config.PLAYER_ATTACK_RANGE
+        self.attack_damage = config.PLAYER_ATTACK_DAMAGE
+        self.attack_cooldown = config.PLAYER_ATTACK_COOLDOWN
+        self.last_attack_time = 0 # Tracks time since last successful attack
 
         # XP and Leveling attributes
         self.level = 1
@@ -36,23 +35,29 @@ class Player:
         
         self.inventory = InventoryManager(capacity=config.PLAYER_INVENTORY_CAPACITY)
         
-        self.original_color = self.color 
+        self.original_color = self.color
         self.is_hit = False
-        self.hit_flash_duration = 10 # To be config.PLAYER_HIT_FLASH_DURATION
+        self.hit_flash_duration = config.PLAYER_HIT_FLASH_DURATION
         self.hit_flash_timer = 0
 
-        self.is_attacking = False
-        self.attack_visual_duration = 7 # To be config.PLAYER_ATTACK_VISUAL_DURATION
+        self.is_attacking = False # To show attack visual
+        self.attack_visual_duration = config.PLAYER_ATTACK_VISUAL_DURATION
         self.attack_visual_timer = 0
-        self.direction = 1 
+        self.direction = 1 # 1 for right, -1 for left
 
         self.sound_manager = sound_manager
 
-        # Pet instantiation will also use config values for its dimensions/color
-        # The color (0,0,255) and dimensions (20,20) are placeholders.
-        # Player.__init__ is already passing sound_manager to Pet in main.py's version.
-        # When config is fully integrated into this class, these will be config.PET_WIDTH etc.
-        self.pet = Pet(self.rect.x - 50, self.rect.y, 20, 20, (0,0,255) , self, self.sound_manager)
+        # Pet instantiation using config values
+        pet_x_offset = config.PET_FOLLOW_DISTANCE + 10 # Initial offset from player
+        self.pet = Pet(
+            self.rect.x - pet_x_offset, 
+            self.rect.y, 
+            config.PET_WIDTH, 
+            config.PET_HEIGHT, 
+            config.PET_COLOR, 
+            self, 
+            self.sound_manager
+        )
 
 
     def draw(self, screen):
@@ -136,49 +141,73 @@ class Player:
             self.velocity_y = 0
             self.is_jumping = False
 
-        self.last_attack_time += 1
-        if self.last_attack_time >= self.attack_cooldown:
-            attack_occurred = False
-            for monster in monsters:
-                effective_attack_rect = self.rect.inflate(self.attack_range, self.attack_range)
-                if effective_attack_rect.colliderect(monster.rect):
-                    monster.health -= self.attack_damage
-                    monster.is_hit = True
-                    
-                    if hasattr(monster, 'hit_flash_duration'): 
-                         monster.hit_flash_timer = monster.hit_flash_duration
-                    else: 
-                         monster.hit_flash_timer = 10 # Fallback
-
-
-                    if self.sound_manager:
-                        self.sound_manager.play_sound("monster_hit")
-                    print(f"Player attacked monster (ID: {id(monster)}). Monster health: {monster.health}")
-                    
-                    if monster.health <= 0:
-                        if self.sound_manager:
-                            self.sound_manager.play_sound("monster_die")
-                        
-                        # Award XP for defeating the monster
-                        self.gain_xp(config.XP_PER_MONSTER_DEFEAT)
-
-                        # Item creation and adding logic is now moved to GameplayScreen.update
-                        print(f"Monster (ID: {id(monster)}) defeated by player.")
-                        
-                    self.last_attack_time = 0
-                    attack_occurred = True
-                    break 
-            
-            if attack_occurred: 
-                if self.sound_manager:
-                    self.sound_manager.play_sound("player_attack")
-                self.is_attacking = True
-                self.attack_visual_timer = self.attack_visual_duration
+        self.velocity_y += config.GRAVITY
+        if self.velocity_y > 15: # Max fall speed
+            self.velocity_y = 15
         
+        self.move(0, self.velocity_y, platforms)
+
+        if self.rect.bottom >= config.SCREEN_HEIGHT:
+            self.rect.bottom = config.SCREEN_HEIGHT
+            self.velocity_y = 0
+            self.is_jumping = False
+
+        # Attack cooldown logic - increments regardless of attacking
+        if self.last_attack_time < self.attack_cooldown:
+            self.last_attack_time += 1
+
+        # Attack visual timer
         if self.is_attacking:
             self.attack_visual_timer -= 1
             if self.attack_visual_timer <= 0:
                 self.is_attacking = False
+                
+    # This method is intended to be called when an attack input is received (e.g., space bar)
+    # The actual call will be managed by GameplayScreen based on input events.
+    def attempt_attack(self, monsters):
+        if self.last_attack_time >= self.attack_cooldown:
+            attack_occurred_this_attempt = False
+            # Determine attack hitbox based on direction
+            attack_hitbox_width = self.attack_range 
+            attack_hitbox_height = self.rect.height 
+            
+            if self.direction == 1: # Facing right
+                attack_hitbox_x = self.rect.right
+            else: # Facing left
+                attack_hitbox_x = self.rect.left - attack_hitbox_width
+            
+            attack_hitbox_y = self.rect.y
+            
+            # This is a simplified hitbox; for more accuracy, it could be centered better
+            # or be a shape other than a rectangle (e.g., arc).
+            # For now, a rect extending from the player's facing side.
+            attack_rect = pygame.Rect(attack_hitbox_x, attack_hitbox_y, attack_hitbox_width, attack_hitbox_height)
+
+            for monster in monsters:
+                if monster.rect.colliderect(attack_rect):
+                    monster.take_damage(self.attack_damage) # Monster handles its own hit flash
+                    if self.sound_manager:
+                        self.sound_manager.play_sound(config.SOUND_MONSTER_HIT) # Use config for sound key
+                    print(f"Player attacked monster (ID: {id(monster)}). Monster health: {monster.health}")
+                    
+                    if monster.health <= 0:
+                        # GameplayScreen will handle monster death (XP, drops)
+                        pass # Monster death is detected and handled in GameplayScreen.update_monsters
+                        
+                    attack_occurred_this_attempt = True
+                    # Typically, an attack might hit multiple monsters if they overlap the hitbox.
+                    # For simplicity, let's assume one attack action hits all valid targets in range
+                    # rather than breaking after the first. If only one monster should be hit, use break.
+            
+            if attack_occurred_this_attempt:
+                if self.sound_manager:
+                    self.sound_manager.play_sound(config.SOUND_PLAYER_ATTACK) # Use config for sound key
+                self.is_attacking = True # Trigger visual
+                self.attack_visual_timer = self.attack_visual_duration
+                self.last_attack_time = 0 # Reset cooldown
+                return True # Attack was performed
+        return False # Attack on cooldown or no targets hit (though cooldown is main check)
+
 
     def gain_xp(self, amount):
         self.experience_points += amount
@@ -199,6 +228,24 @@ class Player:
             self.health = self.max_health # Heal to new max health
             
             if self.sound_manager:
-                self.sound_manager.play_sound("level_up") # Assuming a 'level_up' sound exists
+                self.sound_manager.play_sound(config.SOUND_LEVEL_UP) # Use config for sound key
             print(f"Player reached Level {self.level}! Max health increased to {self.max_health}. XP for next level: {self.xp_to_next_level}.")
             # If experience_points is still >= new xp_to_next_level, the loop continues
+            
+    def calculate_xp_for_next_level(self):
+        """Calculates XP needed for the current level to advance to the next."""
+        return config.XP_PER_LEVEL_BASE * self.level
+
+    def take_damage(self, amount):
+        self.health -= amount
+        self.is_hit = True
+        self.hit_flash_timer = self.hit_flash_duration # Use PLAYER_HIT_FLASH_DURATION from config
+        if self.sound_manager:
+            self.sound_manager.play_sound(config.SOUND_PLAYER_HIT) # Use config for sound key
+        
+        if self.health <= 0:
+            self.health = 0
+            print("Player has been defeated.")
+            # Game over logic will be handled by GameplayScreen or Game class
+        else:
+            print(f"Player took {amount} damage. Health: {self.health}/{self.max_health}")

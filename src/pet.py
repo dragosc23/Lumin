@@ -77,9 +77,16 @@ class Pet:
                 if dist_to_player_sq < player_engagement_range**2:
                     closest_monster.health -= self.attack_damage
                     # Trigger monster's hit flash
-                    closest_monster.is_hit = True
-                    closest_monster.hit_flash_timer = closest_monster.hit_flash_duration
+                    closest_monster.is_hit = True # Monster's take_damage will handle this and its own hit sound
+                    closest_monster.hit_flash_timer = closest_monster.hit_flash_duration # Monster handles its own flash
+                    # Call monster's take_damage method, which also plays SOUND_MONSTER_HIT
+                    closest_monster.take_damage(self.attack_damage) 
+                    
+                    if self.sound_manager:
+                        self.sound_manager.play_sound(config.SOUND_PET_ATTACK)
+                    
                     print(f"Pet attacked monster (ID: {id(closest_monster)}). Monster health: {closest_monster.health}")
                     self.last_attack_time = 0
+                    # Monster death sound (SOUND_MONSTER_DEATH) is handled by GameplayScreen
 
         # (No specific platform collision for attack logic, pet attacks from its current position)
