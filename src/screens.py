@@ -324,29 +324,42 @@ class GameplayScreen(BaseScreen):
         for monster in self.monsters:
             monster.draw(surface, self.HIT_COLOR)
 
-        # UI Text (Health, Level, Inventory)
-        health_text = f"Health: {self.player.health}/{self.game_manager.PLAYER_MAX_HEALTH}"
-        level_text = f"Level: {self.game_manager.current_level_index + 1}"
-        
-        # Accessing draw_text_utility from game_manager
-        self.game_manager.draw_text_utility(surface, health_text, self.ui_font, self.game_manager.config.WHITE, 10, 10)
-        self.game_manager.draw_text_utility(surface, level_text, self.ui_font, self.game_manager.config.WHITE, 10, 40)
+        # UI Text (Health, Level, XP, Inventory)
+        player = self.game_manager.player # Convenience reference
+        draw_text_utility = self.game_manager.draw_text_utility # Convenience reference
+        ui_font = self.ui_font # Already available in GameplayScreen
+        white_color = self.game_manager.config.WHITE # Assuming WHITE is in config
+        # If config is not directly on game_manager, adjust access e.g. self.game_manager.config.WHITE
 
-        # New Inventory Display Logic
-        inventory_y_start = 70 # Starting Y position for inventory list (below Level)
+        # Health
+        # Ensure player.max_health is used, not game_manager.PLAYER_MAX_HEALTH if it can change per player
+        health_text = f"Health: {player.health}/{player.max_health}"
+        draw_text_utility(surface, health_text, ui_font, white_color, 10, 10)
+
+        # Level (using player.level directly)
+        level_text = f"Level: {player.level}"
+        draw_text_utility(surface, level_text, ui_font, white_color, 10, 40)
+
+        # XP Display (New)
+        xp_text = f"XP: {player.experience_points} / {player.xp_to_next_level}"
+        xp_text_y_position = 70 
+        draw_text_utility(surface, xp_text, ui_font, white_color, 10, xp_text_y_position)
+
+        # Adjusted Inventory Display Logic
+        inventory_y_start = xp_text_y_position + 30 # Shift inventory down to 100
         line_height = 25       # Height for each line of text (adjust based on font size)
 
-        if hasattr(self.game_manager, 'player') and hasattr(self.game_manager.player, 'inventory') and hasattr(self.game_manager.player.inventory, 'get_all_items'):
+        if hasattr(player, 'inventory') and hasattr(player.inventory, 'get_all_items'):
             item_slots = self.game_manager.player.inventory.get_all_items()
             
             inventory_title_text = "Inventory:"
-            self.game_manager.draw_text_utility(surface, inventory_title_text, self.ui_font,
-                                                self.game_manager.config.WHITE, 10, inventory_y_start)
+            draw_text_utility(surface, inventory_title_text, ui_font,
+                                                white_color, 10, inventory_y_start)
             
             if not item_slots:
                 inventory_empty_text = "  Empty" # Indent "Empty"
-                self.game_manager.draw_text_utility(surface, inventory_empty_text, self.ui_font, 
-                                                    self.game_manager.config.WHITE, 10, inventory_y_start + line_height)
+                draw_text_utility(surface, inventory_empty_text, ui_font, 
+                                                    white_color, 10, inventory_y_start + line_height)
             else:
                 current_y = inventory_y_start + line_height
                 for slot in item_slots:
@@ -354,13 +367,13 @@ class GameplayScreen(BaseScreen):
                     quantity = slot.get('quantity')
                     if item and quantity is not None: 
                         item_line = f"  - {item.name}: {quantity}" # Indent item list
-                        self.game_manager.draw_text_utility(surface, item_line, self.ui_font, 
-                                                            self.game_manager.config.WHITE, 10, current_y)
+                        draw_text_utility(surface, item_line, ui_font, 
+                                                            white_color, 10, current_y)
                         current_y += line_height
                         if current_y > self.game_manager.screen_height - 20: 
                             break 
         else:
-            self.game_manager.draw_text_utility(surface, "Inventory: N/A", self.ui_font,
+            draw_text_utility(surface, "Inventory: N/A", ui_font,
                                                 self.game_manager.config.RED, 10, inventory_y_start)
 
 

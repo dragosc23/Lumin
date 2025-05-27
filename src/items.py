@@ -17,6 +17,19 @@ class Item:
     def __repr__(self):
         return f"Item({self.name!r}, {self.description!r}, value={self.value}, stackable={self.stackable}, max_stack={self.max_stack})"
 
+    def to_dict(self):
+        """Serializes the item's core attributes to a dictionary."""
+        return {
+            "item_class_name": self.__class__.__name__, # Store the class name for reconstruction
+            "name": self.name,
+            "description": self.description,
+            "value": self.value,
+            "stackable": self.stackable,
+            "max_stack": self.max_stack,
+            "sprite_id": self.sprite_id
+            # Specific item types might add more to this dict in their overrides
+        }
+
 class ConsumableItem(Item):
     """Base class for items that can be consumed (e.g., potions)."""
     def __init__(self, name, description, value=0, stackable=True, max_stack=10, sprite_id=None):
@@ -34,9 +47,15 @@ class ConsumableItem(Item):
 class HealthPotion(ConsumableItem):
     """A potion that restores health."""
     def __init__(self, name="Health Potion", description="Restores a small amount of health.", 
-                 value=25, stackable=True, max_stack=5, heal_amount=50, sprite_id=None):
-        super().__init__(name, description, value, stackable, max_stack, sprite_id)
+                 value=25, stackable=True, max_stack=5, heal_amount=50, sprite_id=None, **kwargs): # Added **kwargs for flexibility
+        super().__init__(name, description, value, stackable, max_stack, sprite_id, **kwargs) # Pass kwargs up
         self.heal_amount = heal_amount
+
+    def to_dict(self):
+        """Adds heal_amount to the base item serialization."""
+        data = super().to_dict()
+        data["heal_amount"] = self.heal_amount
+        return data
 
     def use(self, player): # Target is specifically a player (or object with health/max_health)
         if hasattr(player, 'health') and hasattr(player, 'max_health'):
@@ -55,12 +74,42 @@ class HealthPotion(ConsumableItem):
             print(f"DEBUG: Target {player} does not have health attributes. {self.name} not used.")
             return False # Item not consumed
 
-# --- Item Class Mapping ---
+# --- Item Class Mapping & Creation ---
+# ITEM_CLASS_MAP maps class names to the actual classes.
+# This is crucial for deserializing items correctly.
 ITEM_CLASS_MAP = {
-    "MonsterPart": Item,      # Generic Item, specific details can be passed to constructor or from a config
-    "HealthPotion": HealthPotion
+    "Item": Item, 
+    "ConsumableItem": ConsumableItem, # Though likely won't be directly instantiated often
+    "HealthPotion": HealthPotion,
+    "MonsterPart": Item # MonsterPart will be an instance of Item, name passed via constructor
     # Add other item class names and their classes here as they are defined
 }
+
+def create_item_from_dict(item_data):
+    """
+    Factory function to create an item instance from its serialized dictionary representation.
+    """
+    class_name = item_data.get("item_class_name")
+    item_class = ITEM_CLASS_MAP.get(class_name)
+
+    if not item_class:
+        print(f"Warning: Unknown item class name '{class_name}' during deserialization.")
+        return None
+
+    # Prepare constructor arguments by removing 'item_class_name'
+    # and potentially other non-constructor args if any were added just for serialization.
+    constructor_args = {k: v for k, v in item_data.items() if k != "item_class_name"}
+    
+    # Specific handling for 'MonsterPart' or other generic items if needed,
+    # though the general approach should handle them if their constructor takes these args.
+    # if class_name == "MonsterPart": # This check is actually redundant if Item constructor handles all args
+    #    return Item(**constructor_args) 
+
+    try:
+        return item_class(**constructor_args)
+    except TypeError as e:
+        print(f"Error creating item {class_name} with args {constructor_args}: {e}")
+        return None
 
 if __name__ == '__main__':
     generic_item = Item("Rock", "A common rock.", value=1)
