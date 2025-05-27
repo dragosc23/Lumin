@@ -1,5 +1,12 @@
 # Defines game items (base Item class, specific item types like consumables, etc.)
 import pygame # Added just in case any item might need it for sprites later.
+import logging
+
+# It's good practice to get a logger instance per module.
+# If a central configuration (like in save_manager.py) has already set up handlers for the root logger,
+# this logger will inherit that configuration. Otherwise, logging might not output anywhere
+# unless a handler is explicitly added here or in the main application entry point.
+logger = logging.getLogger(__name__)
 
 class Item:
     """Base class for all items in the game."""
@@ -137,7 +144,7 @@ def create_item_from_dict(item_data):
     item_class = ITEM_CLASS_MAP.get(class_name)
 
     if not item_class:
-        print(f"Warning: Unknown item class name '{class_name}' during deserialization.")
+        logger.warning(f"Unknown item class name '{class_name}' during deserialization. Item data: {item_data}")
         return None
 
     # Prepare constructor arguments by removing 'item_class_name'
@@ -154,7 +161,7 @@ def create_item_from_dict(item_data):
     try:
         return item_class(**constructor_args)
     except TypeError as e:
-        print(f"Error creating item {class_name} with args {constructor_args}: {e}")
+        logger.error(f"Error creating item {class_name} with args {constructor_args}: {e}", exc_info=True)
         # Example: If 'slot' is missing for Armor, it might cause a TypeError if not handled by default in constructor.
         # However, 'slot' is a required positional argument for Equipment and thus Armor.
         return None

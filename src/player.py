@@ -18,10 +18,9 @@ class Player:
         self.rect = pygame.Rect(x, y, width, height)
         self.color = color 
         # Stats and properties from config (or defaults if config not used yet)
-        self.speed = 5 # To be config.PLAYER_SPEED
+        self.speed = config.PLAYER_SPEED # Changed
         self.velocity_y = 0
         self.is_jumping = False
-        # This will become config.PLAYER_MAX_HEALTH in the next step
         self.max_health = config.PLAYER_MAX_HEALTH 
         self.health = self.max_health 
         
@@ -37,6 +36,7 @@ class Player:
         self.level = 1
         self.experience_points = 0
         self.xp_to_next_level = config.XP_PER_LEVEL_BASE * self.level
+        self.gold = config.PLAYER_STARTING_GOLD # Added gold attribute
         
         self.inventory = InventoryManager(capacity=config.PLAYER_INVENTORY_CAPACITY)
         
@@ -47,11 +47,11 @@ class Player:
         
         self.original_color = self.color 
         self.is_hit = False
-        self.hit_flash_duration = 10 # To be config.PLAYER_HIT_FLASH_DURATION
+        self.hit_flash_duration = config.PLAYER_HIT_FLASH_DURATION # Changed
         self.hit_flash_timer = 0
 
         self.is_attacking = False
-        self.attack_visual_duration = 7 # To be config.PLAYER_ATTACK_VISUAL_DURATION
+        self.attack_visual_duration = config.PLAYER_ATTACK_VISUAL_DURATION # Changed
         self.attack_visual_timer = 0
         self.direction = 1 
 
@@ -88,8 +88,8 @@ class Player:
 
 
         if self.is_attacking:
-            attack_rect_width = 30
-            attack_rect_height = self.rect.height * 0.8
+            attack_rect_width = config.PLAYER_ATTACK_VISUAL_WIDTH # Changed
+            attack_rect_height = self.rect.height * config.PLAYER_ATTACK_VISUAL_HEIGHT_RATIO # Changed
             attack_rect_y = self.rect.centery - attack_rect_height / 2
             if self.direction == 1: 
                 attack_rect_x = self.rect.right
@@ -145,8 +145,8 @@ class Player:
     def update(self, platforms, monsters): 
         # This will become config.GRAVITY in the next step
         self.velocity_y += config.GRAVITY 
-        if self.velocity_y > 15: 
-            self.velocity_y = 15
+        if self.velocity_y > config.PLAYER_MAX_FALL_SPEED: # Changed
+            self.velocity_y = config.PLAYER_MAX_FALL_SPEED # Changed
         
         self.move(0, self.velocity_y, platforms)
 
@@ -172,7 +172,7 @@ class Player:
                     if hasattr(monster, 'hit_flash_duration'):
                          monster.hit_flash_timer = monster.hit_flash_duration
                     else: 
-                         monster.hit_flash_timer = 10 # Fallback
+                         monster.hit_flash_timer = config.MONSTER_HIT_FLASH_DURATION # Changed Fallback
 
 
                     if self.sound_manager:

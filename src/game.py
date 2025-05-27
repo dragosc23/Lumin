@@ -1,4 +1,5 @@
 import pygame
+import time # Added import
 
 import config
 from src.world_elements import Platform # Import Platform class
@@ -55,7 +56,10 @@ class Game:
         print(f"DEBUG: New player created from config at ({new_player.rect.x}, {new_player.rect.y})")
         return new_player
 
-    def save_game_state(self, filename="savegame.json"):
+    def save_game_state(self, filename=None): # Default to None
+        if filename is None:
+            filename = config.SAVE_FILENAME # Use from config if None
+
         if self.player is None:
             print("DEBUG: Player object does not exist, cannot save game state.")
             return False # Or handle more gracefully, maybe save non-player data
@@ -68,6 +72,7 @@ class Game:
             "xp_to_next_level": self.player.xp_to_next_level,
             "attack_power": self.player.attack_power, # New
             "defense": self.player.defense,           # New
+            "gold": self.player.gold, # Added gold
             "inventory": self.player.inventory.get_serializable_data(),
             "position": [self.player.rect.x, self.player.rect.y],
             # Note: Player's width, height, color are usually part of its definition,
@@ -90,20 +95,52 @@ class Game:
             # Add other game-wide states here if necessary (e.g., game time, overall progress flags)
         }
         
-        if self.save_manager.save_data(game_state_data): # Filename can be passed if dynamic
+        # Add timestamp before saving
+        current_timestamp = time.time()
+        game_state_data["last_seen_timestamp"] = current_timestamp
+        
+        # Use the SaveManager's configured filename if the passed 'filename' is the default config one
+        # Or, if SaveManager should always use its own internal filename, this logic changes.
+        # For now, assume filename passed to save_game_state overrides SaveManager's default.
+        # However, the SaveManager itself is initialized with config.SAVE_FILENAME.
+        # So, passing filename here seems redundant if it's always config.SAVE_FILENAME.
+        # Let's simplify: SaveManager uses its configured name. This method just triggers.
+        if self.save_manager.save_data(game_state_data): 
             print(f"Game state saved successfully to {self.save_manager.save_filename}.")
             return True
         else:
             print("Failed to save game state.")
             return False
 
-    def load_game_state(self, filename="savegame.json"):
-        loaded_data = self.save_manager.load_data() # Filename can be passed
+    def load_game_state(self, filename=None): # Default to None
+        if filename is None:
+            filename = config.SAVE_FILENAME # Use from config if None
+        
+        # Similar to save, SaveManager uses its own configured filename.
+        # The 'filename' parameter here could be used to tell SaveManager to load a *different* file
+        # but current SaveManager.load_data() doesn't take a filename.
+        # For consistency with the refactor, let's assume SaveManager's methods will be updated
+        # or this method implies "load the default save file".
+        loaded_data = self.save_manager.load_data() 
+        
+        # Initialize offline seconds attribute
+        self.offline_seconds_for_reward_calculation = 0
+
         if loaded_data is None:
             print("DEBUG: No save data found or error loading.")
             # Optionally, start a new game or return to main menu
             # self.start_new_game() # Example method call
             return False
+        
+        # Calculate offline time
+        last_seen_timestamp = loaded_data.get("last_seen_timestamp")
+        if last_seen_timestamp is not None:
+            current_time = time.time()
+            offline_seconds = current_time - last_seen_timestamp
+            self.offline_seconds_for_reward_calculation = offline_seconds
+            print(f"DEBUG: Player was offline for {offline_seconds:.0f} seconds.")
+        else:
+            print("DEBUG: No last_seen_timestamp found. Skipping offline progress calculation for this session.")
 
         self.current_level_index = loaded_data.get("current_level_index", 0)
         
@@ -130,6 +167,7 @@ class Game:
             # Load attack_power and defense, defaulting to base values from config if not in save file
             self.player.attack_power = loaded_player_data.get("attack_power", config.PLAYER_BASE_ATTACK_POWER)
             self.player.defense = loaded_player_data.get("defense", config.PLAYER_BASE_DEFENSE)
+            self.player.gold = loaded_player_data.get("gold", config.PLAYER_STARTING_GOLD) # Added gold loading
 
             # Position
             player_pos = loaded_player_data.get("position")
@@ -175,16 +213,35 @@ class Game:
         # from src.screens import GameplayScreen # Careful with import cycles
         # self.current_screen = GameplayScreen(self.screen, self, self.player) # Assuming GameplayScreen takes player
         
+        # Initialize and potentially calculate offline rewards
+        self.offline_rewards_to_display = None
+        if self.offline_seconds_for_reward_calculation >= config.OFFLINE_MIN_SECONDS_FOR_REWARDS:
+            if self.player: 
+                rewards_summary = self.calculate_and_apply_offline_rewards()
+                if rewards_summary.get("gold_earned", 0) > 0 or rewards_summary.get("xp_earned", 0) > 0:
+                    self.offline_rewards_to_display = rewards_summary
+                    print(f"DEBUG: Offline rewards to display: {self.offline_rewards_to_display}")
+                else:
+                    print("DEBUG: Offline rewards were zero, nothing to display.")
+            else:
+                print("DEBUG: Player object not available, cannot calculate offline rewards during load_game_state.")
+        else:
+            print(f"DEBUG: Offline time {self.offline_seconds_for_reward_calculation:.0f}s is less than minimum {config.OFFLINE_MIN_SECONDS_FOR_REWARDS}s. No rewards to display.")
+
         print(f"Game state loaded. Current level index: {self.current_level_index}")
         return True
 
     @staticmethod
     def draw_text(surface, text, size, x, y, color=config.WHITE, font_name=None):
         # If a specific font name is provided, try to load it. Otherwise, use default system font.
-        if font_name:
-            font = pygame.font.Font(font_name, size)
-        else:
-            font = pygame.font.Font(None, size) # Default font
+        # Updated to use config.UI_FONT_FAMILY as default font name
+        actual_font_name = font_name if font_name is not None else config.UI_FONT_FAMILY
+        try:
+            font = pygame.font.Font(actual_font_name, size)
+        except pygame.error: # Fallback if specific font (even default from config) is not found
+            print(f"Warning: Font '{actual_font_name}' not found. Falling back to Pygame default.")
+            font = pygame.font.Font(None, size) # Pygame's default font
+            
         text_surface = font.render(text, True, color)
         text_rect = text_surface.get_rect()
         text_rect.midtop = (x, y) # Or other positioning as needed, e.g. topleft
@@ -224,6 +281,58 @@ class Game:
             # from src.screens import MainMenuScreen # Example
             # self.current_screen = MainMenuScreen(self.screen, self)
 
+    def calculate_and_apply_offline_rewards(self):
+        rewards_summary = {"gold_earned": 0, "xp_earned": 0}
+
+        if not self.player:
+            print("DEBUG: No player object found, cannot calculate offline rewards.")
+            return rewards_summary
+
+        if self.offline_seconds_for_reward_calculation < config.OFFLINE_MIN_SECONDS_FOR_REWARDS:
+            print(f"DEBUG: Offline time ({self.offline_seconds_for_reward_calculation:.0f}s) below minimum threshold ({config.OFFLINE_MIN_SECONDS_FOR_REWARDS}s), no rewards.")
+            return rewards_summary
+
+        offline_hours = self.offline_seconds_for_reward_calculation / 3600.0
+        
+        if config.OFFLINE_MAX_HOURS_FOR_REWARDS > 0:
+            effective_offline_hours = min(offline_hours, config.OFFLINE_MAX_HOURS_FOR_REWARDS)
+            if offline_hours > config.OFFLINE_MAX_HOURS_FOR_REWARDS:
+                print(f"DEBUG: Offline time ({offline_hours:.2f}h) capped at max ({config.OFFLINE_MAX_HOURS_FOR_REWARDS}h) for reward calculation.")
+        else:
+            effective_offline_hours = offline_hours
+
+        player_level = self.player.level
+
+        # Gold Calculation
+        base_gold_rate = config.OFFLINE_GOLD_PER_HOUR_BASE
+        scaling_factor = config.OFFLINE_REWARD_SCALING_FACTOR_PER_PLAYER_LEVEL
+        effective_gold_per_hour = base_gold_rate * (1 + player_level * scaling_factor)
+        gold_earned = int(effective_gold_per_hour * effective_offline_hours)
+
+        # XP Calculation
+        base_xp_rate = config.OFFLINE_XP_PER_HOUR_BASE
+        effective_xp_per_hour = base_xp_rate * (1 + player_level * scaling_factor)
+        xp_earned = int(effective_xp_per_hour * effective_offline_hours)
+
+        # Apply Rewards
+        # Gold
+        current_gold = getattr(self.player, 'gold', 0)
+        # Ensure player has a gold attribute before setting.
+        # This might be better handled by initializing player.gold = 0 in Player.__init__
+        if not hasattr(self.player, 'gold'):
+            self.player.gold = 0 
+        self.player.gold = current_gold + gold_earned
+        
+        # XP
+        if xp_earned > 0: # Only call gain_xp if there's XP to gain, to avoid unnecessary log messages from gain_xp
+            self.player.gain_xp(xp_earned)
+
+        rewards_summary["gold_earned"] = gold_earned
+        rewards_summary["xp_earned"] = xp_earned
+
+        print(f"DEBUG: Offline rewards calculated: {gold_earned} gold, {xp_earned} XP for {effective_offline_hours:.2f} effective hours (Total offline: {offline_hours:.2f}h).")
+        
+        return rewards_summary
 
     def run(self):
         # self.load_level(self.current_level_index) # Initial level load, might be done by MainMenuScreen starting game

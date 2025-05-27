@@ -5,6 +5,10 @@ import math # For Flyer's vertical bobbing in GameplayScreen's conceptual _load_
 import random # For item drop chance
 from src.items import create_item_from_dict, ITEM_CLASS_MAP # For creating item instances
 import config # For GENERIC_ITEM_DEFAULTS if needed for item creation
+import logging
+
+# Logger for this module
+logger = logging.getLogger(__name__)
 
 class BaseScreen:
     def __init__(self, game_manager):
@@ -28,10 +32,13 @@ class MainMenuScreen(BaseScreen):
         super().__init__(game_manager)
         self.font = self.game_manager.ui_font # Get font from game_manager
         self.sound_manager = self.game_manager.sound_manager # Get sound_manager
+        self.confirming_new_game = False
+        self.showing_offline_summary = False # New state for offline summary
+        self.offline_summary_details = None  # To store details from game_manager
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
+        button_width = config.MAIN_MENU_BUTTON_WIDTH
+        button_height = config.MAIN_MENU_BUTTON_HEIGHT
+        spacing = config.MAIN_MENU_BUTTON_SPACING
         # Adjusted start_y to dynamically calculate based on number of buttons
         num_buttons = 2
         if self.game_manager.save_manager and os.path.exists(self.game_manager.save_manager.save_filename):
@@ -52,8 +59,9 @@ class MainMenuScreen(BaseScreen):
             button_color=(0, 150, 0),
             hover_color=(0, 200, 0),
             sound_manager=self.sound_manager,
-            action=self.game_manager.start_new_game
+            action=self.handle_new_game_press # Changed action
         ))
+        self.new_game_button_ref = self.buttons[-1] # Keep a reference if needed later
         current_y += button_height + spacing
 
         if self.game_manager.save_manager and os.path.exists(self.game_manager.save_manager.save_filename):
@@ -80,37 +88,171 @@ class MainMenuScreen(BaseScreen):
             action=self.game_manager.quit_game
         ))
 
+        # Confirmation Dialog Buttons
+        confirm_button_width = config.CONFIRM_DIALOG_BUTTON_WIDTH
+        confirm_button_height = config.CONFIRM_DIALOG_BUTTON_HEIGHT
+        confirm_spacing = config.CONFIRM_DIALOG_BUTTON_SPACING
+        dialog_center_x = self.game_manager.screen_width // 2
+        dialog_center_y = self.game_manager.screen_height // 2
+
+        self.confirm_yes_button = Button(
+            text="Yes, Overwrite",
+            rect=pygame.Rect(dialog_center_x - confirm_button_width - confirm_spacing // 2, dialog_center_y + 30, confirm_button_width, confirm_button_height),
+            font=self.font,
+            text_color=(255, 255, 255),
+            button_color=(180, 0, 0), # Reddish for confirmation
+            hover_color=(220, 0, 0),
+            sound_manager=self.sound_manager,
+            action=self.confirm_new_game_yes
+        )
+        self.confirm_no_button = Button(
+            text="No, Cancel",
+            rect=pygame.Rect(dialog_center_x + confirm_spacing // 2, dialog_center_y + 30, confirm_button_width, confirm_button_height),
+            font=self.font,
+            text_color=(255, 255, 255),
+            button_color=(80, 80, 80), # Grayish
+            hover_color=(120, 120, 120),
+            sound_manager=self.sound_manager,
+            action=self.confirm_new_game_no
+        )
+        self.confirmation_buttons = [self.confirm_yes_button, self.confirm_no_button]
+        self.confirmation_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.CONFIRM_DIALOG_FONT_SIZE)
+        
+        # Offline Summary Pop-up elements
+        self.summary_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.UI_FONT_SIZE) # Using general UI_FONT_SIZE for details
+        summary_button_width = 200
+        summary_button_height = 50
+        summary_center_x = self.game_manager.screen_width // 2
+        summary_center_y = self.game_manager.screen_height // 2
+        
+        self.dismiss_summary_button = Button(
+            text="Okay",
+            rect=pygame.Rect(summary_center_x - summary_button_width // 2, summary_center_y + 60, summary_button_width, summary_button_height),
+            font=self.font,
+            text_color=config.WHITE,
+            button_color=(0, 100, 0), # Greenish
+            hover_color=(0, 150, 0),
+            sound_manager=self.sound_manager,
+            action=self.dismiss_offline_summary
+        )
+
+    def dismiss_offline_summary(self):
+        self.showing_offline_summary = False
+        self.offline_summary_details = None # Clear details
+        if self.game_manager: # Clear the flag in game_manager
+            self.game_manager.offline_rewards_to_display = None
+        if self.sound_manager:
+            self.sound_manager.play_sound("ui_click")
+
+    def handle_new_game_press(self):
+        if self.game_manager.save_manager and os.path.exists(self.game_manager.save_manager.save_filename):
+            self.confirming_new_game = True
+            if self.sound_manager: self.sound_manager.play_sound("ui_prompt") # Optional: sound for prompt
+        else:
+            self.game_manager.start_new_game()
+
+    def confirm_new_game_yes(self):
+        self.game_manager.start_new_game()
+        self.confirming_new_game = False
+
+    def confirm_new_game_no(self):
+        self.confirming_new_game = False
+        if self.sound_manager: self.sound_manager.play_sound("ui_cancel") # Optional: sound for cancel
+
     def handle_events(self, events):
-        for event in events:
-            if event.type == pygame.QUIT: # Allow quitting from menu via window X
-                self.game_manager.quit_game()
-            for button in self.buttons:
-                if button.handle_event(event):
-                    break # Event handled by a button
+        if self.showing_offline_summary:
+            for event in events:
+                if event.type == pygame.QUIT:
+                    self.game_manager.quit_game()
+                if self.dismiss_summary_button.handle_event(event):
+                    return # Event handled by dismiss button
+        elif self.confirming_new_game:
+            for event in events:
+                if event.type == pygame.QUIT:
+                    self.game_manager.quit_game()
+                for button in self.confirmation_buttons:
+                    if button.handle_event(event):
+                        return # Event handled by confirmation button
+        else:
+            for event in events:
+                if event.type == pygame.QUIT: # Allow quitting from menu via window X
+                    self.game_manager.quit_game()
+                for button in self.buttons:
+                    if button.handle_event(event):
+                        break # Event handled by a main menu button
 
     def update(self, dt):
-        pass # Main menu buttons don't have much to update beyond hover state handled by events
+        # Check for offline summary data at the start of update/render cycle
+        if self.game_manager and hasattr(self.game_manager, 'offline_rewards_to_display') and \
+           self.game_manager.offline_rewards_to_display and not self.showing_offline_summary:
+            self.offline_summary_details = self.game_manager.offline_rewards_to_display.copy()
+            self.showing_offline_summary = True
+            # Optional: Play a sound when the summary appears
+            # if self.sound_manager: self.sound_manager.play_sound("summary_appears")
+
 
     def render(self, surface):
-        surface.fill((50, 50, 70)) # Background color for main menu
-        title_font = pygame.font.SysFont("arial", 50) 
-        title_surface = title_font.render("My Autobattler Game", True, (200, 200, 255))
+        surface.fill((50, 50, 70)) # TODO: Make this a config constant if desired, e.g., config.MAIN_MENU_BG_COLOR
+        title_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.TITLE_FONT_SIZE)
+        title_surface = title_font.render(config.GAME_TITLE, True, (200, 200, 255)) # Using game title from config; color can be config
         title_rect = title_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 4))
         surface.blit(title_surface, title_rect)
 
+        # Render main menu buttons (they will be overlaid if a dialog is active)
         for button in self.buttons:
             button.draw(surface)
+
+        if self.showing_offline_summary and self.offline_summary_details:
+            # Draw overlay for offline summary
+            overlay = pygame.Surface((self.game_manager.screen_width, self.game_manager.screen_height), pygame.SRCALPHA)
+            overlay.fill(config.CONFIRM_DIALOG_OVERLAY_COLOR_ALPHA) # Using same overlay as confirm for now
+            surface.blit(overlay, (0,0))
+
+            # Offline Summary Dialog
+            summary_title_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.CONFIRM_DIALOG_FONT_SIZE) # Using confirm dialog font size for title
+            summary_title_surface = summary_title_font.render("Offline Progress!", True, config.WHITE)
+            summary_title_rect = summary_title_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 2 - 80))
+            surface.blit(summary_title_surface, summary_title_rect)
+
+            gold_text = f"Gold Earned: {self.offline_summary_details.get('gold_earned', 0)}"
+            gold_surface = self.summary_font.render(gold_text, True, config.WHITE)
+            gold_rect = gold_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 2 - 30))
+            surface.blit(gold_surface, gold_rect)
+
+            xp_text = f"XP Earned: {self.offline_summary_details.get('xp_earned', 0)}"
+            xp_surface = self.summary_font.render(xp_text, True, config.WHITE)
+            xp_rect = xp_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 2 + 10))
+            surface.blit(xp_surface, xp_rect)
+            
+            self.dismiss_summary_button.draw(surface)
+
+        elif self.confirming_new_game:
+            # Draw semi-transparent overlay for new game confirmation
+            overlay = pygame.Surface((self.game_manager.screen_width, self.game_manager.screen_height), pygame.SRCALPHA)
+            overlay.fill(config.CONFIRM_DIALOG_OVERLAY_COLOR_ALPHA) 
+            surface.blit(overlay, (0, 0))
+
+            # Draw confirmation message
+            msg_text = config.CONFIRM_NEW_GAME_MESSAGE
+            msg_surface = self.confirmation_font.render(msg_text, True, (255, 255, 255)) # Text color can be config
+            msg_rect = msg_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 2 - 40))
+            surface.blit(msg_surface, msg_rect)
+
+            # Draw confirmation buttons
+            for button in self.confirmation_buttons:
+                button.draw(surface)
+        # If neither summary nor confirmation is active, main menu buttons are already drawn.
 
 class PauseScreen(BaseScreen):
     def __init__(self, game_manager):
         super().__init__(game_manager)
         self.font = self.game_manager.ui_font 
-        self.title_font = pygame.font.SysFont("arial", 48) 
+        self.title_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.PAUSED_FONT_SIZE) 
         self.sound_manager = self.game_manager.sound_manager
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
+        button_width = config.PAUSE_MENU_BUTTON_WIDTH
+        button_height = config.PAUSE_MENU_BUTTON_HEIGHT
+        spacing = config.PAUSE_MENU_BUTTON_SPACING
         start_y = self.game_manager.screen_height // 2 - (button_height * 2 + spacing * 1) // 2
 
         self.buttons = []
@@ -156,10 +298,10 @@ class PauseScreen(BaseScreen):
 
     def render(self, surface):
         overlay = pygame.Surface((self.game_manager.screen_width, self.game_manager.screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180)) 
+        overlay.fill(config.PAUSE_SCREEN_OVERLAY_COLOR_ALPHA) 
         surface.blit(overlay, (0,0)) 
 
-        paused_text_surface = self.title_font.render("Paused", True, (255, 255, 255))
+        paused_text_surface = self.title_font.render("Paused", True, (255, 255, 255)) # Text color can be from config
         paused_text_rect = paused_text_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 3))
         surface.blit(paused_text_surface, paused_text_rect)
 
@@ -220,14 +362,14 @@ class GameplayScreen(BaseScreen):
                 monster_y = 0
 
                 if self.platforms: 
-                    base_x_on_platform = self.platforms[0].rect.left + 70 
-                    monster_x = base_x_on_platform + i * (monster_width + 80) + monster_spawn_offset_x
+                    base_x_on_platform = self.platforms[0].rect.left + config.GAMEPLAY_MONSTER_DEFAULT_SPAWN_OFFSET_X
+                    monster_x = base_x_on_platform + i * (monster_width + config.GAMEPLAY_MONSTER_DEFAULT_SPACING_X) + monster_spawn_offset_x
                     monster_y = self.platforms[0].rect.top - monster_height
-                    if monster_x + monster_width > self.platforms[0].rect.right - 20:
-                         monster_x = self.platforms[0].rect.left + 20 + i * 10 + monster_spawn_offset_x
+                    if monster_x + monster_width > self.platforms[0].rect.right - 20: # -20 is a buffer, could be a config
+                         monster_x = self.platforms[0].rect.left + 20 + i * 10 + monster_spawn_offset_x # 20, 10 are buffers/small spacing
                 else: 
-                    monster_x = 150 + i * 150 + monster_spawn_offset_x
-                    monster_y = self.screen_height - monster_height - 5
+                    monster_x = config.GAMEPLAY_MONSTER_FALLBACK_SPAWN_START_X + i * config.GAMEPLAY_MONSTER_FALLBACK_SPAWN_SPACING_X + monster_spawn_offset_x
+                    monster_y = self.screen_height - monster_height - 5 # -5 is a small offset from bottom
 
                 creation_args = monster_group_config.copy()
                 creation_args.pop("type", None) # Remove keys not part of constructor
@@ -250,16 +392,18 @@ class GameplayScreen(BaseScreen):
                     creation_args['color'] = creation_args.get('color', self.RED)
                     creation_args['gravity_val'] = self.game_manager.GRAVITY
                     creation_args['screen_height_val'] = self.screen_height
-                    new_monster = self.game_manager.Grunt(width=monster_width, height=monster_height, **creation_args)
+                    # Grunt width/height are now defaults in Grunt.__init__ via config.DEFAULT_GRUNT_STATS
+                    new_monster = self.game_manager.Grunt(**creation_args) # Pass x,y and other overrides
                 elif monster_type_str == "Flyer":
-                    flyer_y_offset = monster_group_config.get("spawn_y_offset", -100) 
+                    flyer_y_offset = monster_group_config.get("spawn_y_offset", config.GAMEPLAY_FLYER_DEFAULT_SPAWN_Y_OFFSET) 
                     creation_args['y'] = self.screen_height // 2 + flyer_y_offset 
-                    creation_args['color'] = creation_args.get('color', self.game_manager.colors.get("YELLOW", (255,255,0)))
-                    new_monster = self.game_manager.Flyer(width=monster_width, height=monster_height, **creation_args)
+                    # Flyer color will default from config.DEFAULT_FLYER_STATS if not in creation_args
+                    # Flyer width/height are now defaults in Flyer.__init__ via config.DEFAULT_FLYER_STATS
+                    new_monster = self.game_manager.Flyer(**creation_args) # Pass x,y and other overrides
                 
                 if new_monster:
                     self.monsters.append(new_monster)
-            monster_spawn_offset_x += count * (monster_width + 80) + 100
+            monster_spawn_offset_x += count * (monster_width + config.GAMEPLAY_MONSTER_DEFAULT_SPACING_X) + 100 # 100 is additional group spacing
 
 
     def start_level(self, level_idx):
@@ -295,21 +439,22 @@ class GameplayScreen(BaseScreen):
         for monster in list(self.monsters): # Iterate over a copy for safe removal
             monster.update(self.platforms, self.player)
             if monster.health <= 0:
-                print(f"DEBUG: Monster {id(monster)} defeated.")
+                logger.info(f"Monster {type(monster).__name__} (ID: {id(monster)}) defeated.")
                 # Handle item drops
                 if hasattr(monster, 'possible_drops') and monster.possible_drops:
                     for drop_info in monster.possible_drops:
                         item_id = drop_info.get("item_id")
                         chance = drop_info.get("chance", 0)
                         quantity = drop_info.get("quantity", 1)
+                        data_used_for_creation = None # To store context for logging
 
                         if random.random() < chance:
-                            print(f"DEBUG: Monster dropped {item_id} (Quantity: {quantity})")
+                            logger.info(f"Monster {type(monster).__name__} (ID: {id(monster)}) dropped {item_id} (Quantity: {quantity})")
                             
                             # Create item instance
                             # Option 1: Using create_item_from_dict with item_id as class name
                             # This assumes item_id in config.LEVEL_CONFIGS matches a class name in ITEM_CLASS_MAP
-                            item_data_for_creation = {"item_class_name": item_id}
+                            item_data_for_creation = {"item_class_name": item_id} # Default data
                             
                             # Option 2: If item_id is a key for GENERIC_ITEM_DEFAULTS
                             # and those defaults provide all necessary constructor args.
@@ -323,19 +468,31 @@ class GameplayScreen(BaseScreen):
 
                                 factory_data = generic_item_config.copy() # Start with defaults from GENERIC_ITEM_DEFAULTS
                                 factory_data["item_class_name"] = item_class_name_for_factory # Ensure correct class name
+                                data_used_for_creation = factory_data
                                 item_to_drop = create_item_from_dict(factory_data)
                             else:
                                 # Fallback if item_id is not in GENERIC_ITEM_DEFAULTS but might be a direct class name
+                                data_used_for_creation = item_data_for_creation
                                 item_to_drop = create_item_from_dict(item_data_for_creation)
 
                             if item_to_drop:
                                 was_added = self.game_manager.player.inventory.add_item(item_to_drop, quantity)
-                                if not was_added:
-                                    print(f"DEBUG: Inventory full, could not add {item_id}")
+                                if was_added:
+                                    # Log successful pickup (optional, could be info or debug)
+                                    logger.info(f"Player picked up {item_to_drop.name} (Quantity: {quantity}) from monster {type(monster).__name__} (ID: {id(monster)})")
+                                    if self.sound_manager:
+                                        self.sound_manager.play_sound("item_pickup")
+                                else:
+                                    logger.warning(f"Inventory full, could not add {item_id} (Quantity: {quantity}) from monster {type(monster).__name__} (ID: {id(monster)})")
                             else:
-                                print(f"DEBUG: Could not create item instance for {item_id} using data {item_data_for_creation} or {generic_item_config}")
+                                # This is the enhanced logging part
+                                logger.error(
+                                    f"Failed to create item instance for drop. Item ID: '{item_id}', "
+                                    f"Monster: {type(monster).__name__} (ID: {id(monster)}), "
+                                    f"Attempted with data: {data_used_for_creation}"
+                                )
                         # else: # Optional: Log missed drops for debugging
-                        #     print(f"DEBUG: Monster did NOT drop {item_id} (Chance: {chance})")
+                        #     logger.info(f"Monster {type(monster).__name__} (ID: {id(monster)}) did NOT drop {item_id} (Chance: {chance})")
                 
                 self.monsters.remove(monster) # Remove the defeated monster from the list
 
@@ -398,9 +555,14 @@ class GameplayScreen(BaseScreen):
         defense_text = f"Defense: {player.get_total_defense()}"
         draw_text_utility(surface, defense_text, ui_font, white_color, 10, defense_text_y_position)
 
+        # Gold Display
+        gold_text_y_position = defense_text_y_position + 30 # Y = 160
+        gold_text = f"Gold: {player.gold}" # Assuming player.gold exists
+        draw_text_utility(surface, gold_text, ui_font, white_color, 10, gold_text_y_position)
+
         # Adjusted Inventory Display Logic
-        inventory_y_start = defense_text_y_position + 30 # Shift inventory down to Y = 160
-        line_height = 25       # Height for each line of text (adjust based on font size)
+        inventory_y_start = gold_text_y_position + 30 # Shift inventory down to Y = 190
+        line_height = config.UI_INVENTORY_LINE_HEIGHT
 
         if hasattr(player, 'inventory') and hasattr(player.inventory, 'get_all_items'):
             item_slots = self.game_manager.player.inventory.get_all_items()
@@ -412,9 +574,9 @@ class GameplayScreen(BaseScreen):
             if not item_slots:
                 inventory_empty_text = "  Empty" # Indent "Empty"
                 draw_text_utility(surface, inventory_empty_text, ui_font, 
-                                                    white_color, 10, inventory_y_start + line_height)
+                                                    white_color, 10, inventory_y_start + line_height) # Using config.UI_INVENTORY_LINE_HEIGHT indirectly
             else:
-                current_y = inventory_y_start + line_height
+                current_y = inventory_y_start + line_height # Using config.UI_INVENTORY_LINE_HEIGHT indirectly
                 for slot in item_slots:
                     item = slot.get('item')
                     quantity = slot.get('quantity')
@@ -422,7 +584,7 @@ class GameplayScreen(BaseScreen):
                         item_line = f"  - {item.name}: {quantity}" # Indent item list
                         draw_text_utility(surface, item_line, ui_font, 
                                                             white_color, 10, current_y)
-                        current_y += line_height
+                        current_y += line_height # Using config.UI_INVENTORY_LINE_HEIGHT indirectly
                         if current_y > self.game_manager.screen_height - 20: 
                             break 
         else:
@@ -433,17 +595,17 @@ class GameplayScreen(BaseScreen):
 class GameOverScreen(BaseScreen):
     def __init__(self, game_manager):
         super().__init__(game_manager)
-        self.title_font = pygame.font.SysFont("arial", 72) # Large font for "Game Over"
+        self.title_font = pygame.font.SysFont(config.UI_FONT_FAMILY, config.GAME_OVER_FONT_SIZE)
         self.button_font = self.game_manager.ui_font # Use standard UI font for buttons
         self.sound_manager = self.game_manager.sound_manager
-        self.message_font = self.game_manager.ui_font
-        self.message_color = self.game_manager.colors.get("WHITE", (255, 255, 255))
-        self.title_color = self.game_manager.colors.get("RED", (255, 0, 0))
-        self.background_color = (30, 30, 30)
+        self.message_font = self.game_manager.ui_font # Could be another config font
+        self.message_color = config.WHITE # Use config.WHITE
+        self.title_color = config.RED # Use config.RED
+        self.background_color = config.GAME_OVER_BACKGROUND_COLOR
 
-        button_width = 250
-        button_height = 50
-        spacing = 20
+        button_width = config.GAME_OVER_BUTTON_WIDTH
+        button_height = config.GAME_OVER_BUTTON_HEIGHT
+        spacing = config.GAME_OVER_BUTTON_SPACING
         # Buttons are centered below the "Game Over" message
         start_y = self.game_manager.screen_height // 2 
 
@@ -490,7 +652,7 @@ class GameOverScreen(BaseScreen):
         surface.blit(game_over_text_surface, game_over_text_rect)
 
         # Optional: A sub-message
-        sub_message_surface = self.message_font.render("Better luck next time!", True, self.message_color)
+        sub_message_surface = self.message_font.render(config.GAME_OVER_SUB_MESSAGE, True, self.message_color)
         sub_message_rect = sub_message_surface.get_rect(center=(self.game_manager.screen_width // 2, self.game_manager.screen_height // 3 + 60))
         surface.blit(sub_message_surface, sub_message_rect)
 

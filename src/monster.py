@@ -109,9 +109,15 @@ class BaseMonster:
 
 
 class Grunt(BaseMonster):
-    def __init__(self, x, y, width, height, color, 
-                 health=120, attack_damage=8, attack_range=60, attack_cooldown=90, speed=2, 
-                 patrol_range_x=50, gravity_val=0, screen_height_val=0, possible_drops=None): 
+    def __init__(self, x, y, width=config.DEFAULT_GRUNT_STATS["width"], height=config.DEFAULT_GRUNT_STATS["height"], 
+                 color=config.DEFAULT_GRUNT_STATS["color"], 
+                 health=config.DEFAULT_GRUNT_STATS["health"], 
+                 attack_damage=config.DEFAULT_GRUNT_STATS["attack_damage"], 
+                 attack_range=config.DEFAULT_GRUNT_STATS["attack_range"], 
+                 attack_cooldown=config.DEFAULT_GRUNT_STATS["attack_cooldown"], 
+                 speed=config.DEFAULT_GRUNT_STATS["speed"], 
+                 patrol_range_x=config.DEFAULT_GRUNT_STATS["patrol_range_x"], 
+                 gravity_val=0, screen_height_val=0, possible_drops=None): 
         super().__init__(x, y, width, height, color, health, attack_damage, attack_range, attack_cooldown, speed, possible_drops, gravity_val, screen_height_val)
         self.patrol_range_x = patrol_range_x
         self.start_x = x 
@@ -120,9 +126,17 @@ class Grunt(BaseMonster):
     
 
 class Flyer(BaseMonster):
-    def __init__(self, x, y, width, height, color, 
-                 health=60, attack_damage=6, attack_range=50, attack_cooldown=100, speed=2.5, 
-                 vertical_amplitude=30, vertical_speed_factor=0.005, patrol_range_x=50, possible_drops=None):
+    def __init__(self, x, y, width=config.DEFAULT_FLYER_STATS["width"], height=config.DEFAULT_FLYER_STATS["height"], 
+                 color=config.DEFAULT_FLYER_STATS["color"], 
+                 health=config.DEFAULT_FLYER_STATS["health"], 
+                 attack_damage=config.DEFAULT_FLYER_STATS["attack_damage"], 
+                 attack_range=config.DEFAULT_FLYER_STATS["attack_range"], 
+                 attack_cooldown=config.DEFAULT_FLYER_STATS["attack_cooldown"], 
+                 speed=config.DEFAULT_FLYER_STATS["speed"], 
+                 vertical_amplitude=config.DEFAULT_FLYER_STATS["vertical_amplitude"], 
+                 vertical_speed_factor=config.DEFAULT_FLYER_STATS["vertical_speed_factor"], 
+                 patrol_range_x=config.DEFAULT_FLYER_STATS["patrol_range_x"], 
+                 possible_drops=None):
         super().__init__(x, y, width, height, color, health, attack_damage, attack_range, attack_cooldown, speed, possible_drops)
         self.initial_y = y
         self.vertical_amplitude = vertical_amplitude
@@ -131,7 +145,7 @@ class Flyer(BaseMonster):
         self.start_x = x   
         self.patrol_range_x = patrol_range_x 
 
-    def update(self, platforms, player, monsters_list=None): 
+    def update(self, platforms, player, monsters_list=None): # monsters_list is not used here, consider removing if not planned
         self.rect.x += self.speed * self.direction
         if self.direction == 1 and self.rect.right >= self.start_x + self.patrol_range_x:
             self.direction = -1
