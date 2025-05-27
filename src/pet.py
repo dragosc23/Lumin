@@ -72,7 +72,8 @@ class Pet:
                 # Check if the monster is also close to the player
                 dist_to_player_sq = (closest_monster.rect.centerx - player.rect.centerx)**2 + \
                                     (closest_monster.rect.centery - player.rect.centery)**2
-                player_engagement_range = player.attack_range * 1.5 
+                # Use the new constant from config for player engagement range
+                player_engagement_range = player.attack_range * config.PET_ASSIST_RANGE_MULTIPLIER
                 
                 if dist_to_player_sq < player_engagement_range**2:
                     closest_monster.health -= self.attack_damage

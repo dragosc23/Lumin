@@ -2,6 +2,9 @@ import pygame
 from src.ui_elements import Button # Assuming Button is in ui_elements.py
 import os # Standard practice to import at the top
 import math # For Flyer's vertical bobbing in GameplayScreen's conceptual _load_level_logic
+import random # For item drop chance
+from src.items import create_item_from_dict, ITEM_CLASS_MAP # For creating item instances
+import config # For GENERIC_ITEM_DEFAULTS if needed for item creation
 
 class BaseScreen:
     def __init__(self, game_manager):
@@ -289,13 +292,54 @@ class GameplayScreen(BaseScreen):
         if self.player.pet:
             self.player.pet.update(self.platforms, self.monsters, self.player)
 
-        for monster in list(self.monsters): 
+        for monster in list(self.monsters): # Iterate over a copy for safe removal
             monster.update(self.platforms, self.player)
-        
-        new_monsters_list = [m for m in self.monsters if m.health > 0]
-        if len(new_monsters_list) < len(self.monsters):
-             self.monsters[:] = new_monsters_list 
+            if monster.health <= 0:
+                print(f"DEBUG: Monster {id(monster)} defeated.")
+                # Handle item drops
+                if hasattr(monster, 'possible_drops') and monster.possible_drops:
+                    for drop_info in monster.possible_drops:
+                        item_id = drop_info.get("item_id")
+                        chance = drop_info.get("chance", 0)
+                        quantity = drop_info.get("quantity", 1)
 
+                        if random.random() < chance:
+                            print(f"DEBUG: Monster dropped {item_id} (Quantity: {quantity})")
+                            
+                            # Create item instance
+                            # Option 1: Using create_item_from_dict with item_id as class name
+                            # This assumes item_id in config.LEVEL_CONFIGS matches a class name in ITEM_CLASS_MAP
+                            item_data_for_creation = {"item_class_name": item_id}
+                            
+                            # Option 2: If item_id is a key for GENERIC_ITEM_DEFAULTS
+                            # and those defaults provide all necessary constructor args.
+                            # This is more robust if item_id is "MonsterPart" and Item class needs name, desc, etc.
+                            generic_item_config = config.GENERIC_ITEM_DEFAULTS.get(item_id)
+                            if generic_item_config:
+                                # We need to ensure the item_class_name is correct if item_id is not the class name
+                                # For "MonsterPart", item_class_name is "Item".
+                                # For "HealthPotion", item_id is "HealthPotion", class name is "HealthPotion".
+                                item_class_name_for_factory = ITEM_CLASS_MAP.get(item_id).__name__ if ITEM_CLASS_MAP.get(item_id) else item_id
+
+                                factory_data = generic_item_config.copy() # Start with defaults from GENERIC_ITEM_DEFAULTS
+                                factory_data["item_class_name"] = item_class_name_for_factory # Ensure correct class name
+                                item_to_drop = create_item_from_dict(factory_data)
+                            else:
+                                # Fallback if item_id is not in GENERIC_ITEM_DEFAULTS but might be a direct class name
+                                item_to_drop = create_item_from_dict(item_data_for_creation)
+
+                            if item_to_drop:
+                                was_added = self.game_manager.player.inventory.add_item(item_to_drop, quantity)
+                                if not was_added:
+                                    print(f"DEBUG: Inventory full, could not add {item_id}")
+                            else:
+                                print(f"DEBUG: Could not create item instance for {item_id} using data {item_data_for_creation} or {generic_item_config}")
+                        # else: # Optional: Log missed drops for debugging
+                        #     print(f"DEBUG: Monster did NOT drop {item_id} (Chance: {chance})")
+                
+                self.monsters.remove(monster) # Remove the defeated monster from the list
+
+        # After processing all monsters, check for level clear condition
         if not self.monsters and self.player.health > 0:
             print(f"Level {self.game_manager.current_level_index + 1} cleared!")
             self.game_manager.current_level_index += 1
@@ -324,29 +368,51 @@ class GameplayScreen(BaseScreen):
         for monster in self.monsters:
             monster.draw(surface, self.HIT_COLOR)
 
-        # UI Text (Health, Level, Inventory)
-        health_text = f"Health: {self.player.health}/{self.game_manager.PLAYER_MAX_HEALTH}"
-        level_text = f"Level: {self.game_manager.current_level_index + 1}"
-        
-        # Accessing draw_text_utility from game_manager
-        self.game_manager.draw_text_utility(surface, health_text, self.ui_font, self.game_manager.config.WHITE, 10, 10)
-        self.game_manager.draw_text_utility(surface, level_text, self.ui_font, self.game_manager.config.WHITE, 10, 40)
+        # UI Text (Health, Level, XP, Inventory)
+        player = self.game_manager.player # Convenience reference
+        draw_text_utility = self.game_manager.draw_text_utility # Convenience reference
+        ui_font = self.ui_font # Already available in GameplayScreen
+        white_color = self.game_manager.config.WHITE # Assuming WHITE is in config
+        # If config is not directly on game_manager, adjust access e.g. self.game_manager.config.WHITE
 
-        # New Inventory Display Logic
-        inventory_y_start = 70 # Starting Y position for inventory list (below Level)
+        # Health (using get_total_max_health)
+        health_text = f"Health: {player.health}/{player.get_total_max_health()}"
+        draw_text_utility(surface, health_text, ui_font, white_color, 10, 10)
+
+        # Level (using player.level directly - not affected by equipment)
+        level_text = f"Level: {player.level}"
+        draw_text_utility(surface, level_text, ui_font, white_color, 10, 40)
+
+        # XP Display (not affected by equipment)
+        xp_text = f"XP: {player.experience_points} / {player.xp_to_next_level}"
+        xp_text_y_position = 70 
+        draw_text_utility(surface, xp_text, ui_font, white_color, 10, xp_text_y_position)
+
+        # Attack Power Display (using get_total_attack_power)
+        attack_text_y_position = xp_text_y_position + 30 # Y = 100
+        attack_text = f"Attack: {player.get_total_attack_power()}"
+        draw_text_utility(surface, attack_text, ui_font, white_color, 10, attack_text_y_position)
+
+        # Defense Display (using get_total_defense)
+        defense_text_y_position = attack_text_y_position + 30 # Y = 130
+        defense_text = f"Defense: {player.get_total_defense()}"
+        draw_text_utility(surface, defense_text, ui_font, white_color, 10, defense_text_y_position)
+
+        # Adjusted Inventory Display Logic
+        inventory_y_start = defense_text_y_position + 30 # Shift inventory down to Y = 160
         line_height = 25       # Height for each line of text (adjust based on font size)
 
-        if hasattr(self.game_manager, 'player') and hasattr(self.game_manager.player, 'inventory') and hasattr(self.game_manager.player.inventory, 'get_all_items'):
+        if hasattr(player, 'inventory') and hasattr(player.inventory, 'get_all_items'):
             item_slots = self.game_manager.player.inventory.get_all_items()
             
             inventory_title_text = "Inventory:"
-            self.game_manager.draw_text_utility(surface, inventory_title_text, self.ui_font,
-                                                self.game_manager.config.WHITE, 10, inventory_y_start)
+            draw_text_utility(surface, inventory_title_text, ui_font,
+                                                white_color, 10, inventory_y_start)
             
             if not item_slots:
                 inventory_empty_text = "  Empty" # Indent "Empty"
-                self.game_manager.draw_text_utility(surface, inventory_empty_text, self.ui_font, 
-                                                    self.game_manager.config.WHITE, 10, inventory_y_start + line_height)
+                draw_text_utility(surface, inventory_empty_text, ui_font, 
+                                                    white_color, 10, inventory_y_start + line_height)
             else:
                 current_y = inventory_y_start + line_height
                 for slot in item_slots:
@@ -354,13 +420,13 @@ class GameplayScreen(BaseScreen):
                     quantity = slot.get('quantity')
                     if item and quantity is not None: 
                         item_line = f"  - {item.name}: {quantity}" # Indent item list
-                        self.game_manager.draw_text_utility(surface, item_line, self.ui_font, 
-                                                            self.game_manager.config.WHITE, 10, current_y)
+                        draw_text_utility(surface, item_line, ui_font, 
+                                                            white_color, 10, current_y)
                         current_y += line_height
                         if current_y > self.game_manager.screen_height - 20: 
                             break 
         else:
-            self.game_manager.draw_text_utility(surface, "Inventory: N/A", self.ui_font,
+            draw_text_utility(surface, "Inventory: N/A", ui_font,
                                                 self.game_manager.config.RED, 10, inventory_y_start)
 
 

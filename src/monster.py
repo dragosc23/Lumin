@@ -45,7 +45,15 @@ class BaseMonster:
         if self.last_attack_time >= self.attack_cooldown:
             effective_attack_rect = self.rect.inflate(self.attack_range, self.attack_range)
             if effective_attack_rect.colliderect(player.rect):
-                player.health -= self.attack_damage
+                base_damage_dealt = self.attack_damage
+                
+                # Calculate effective damage after player's total defense
+                player_total_defense = player.get_total_defense() # Use total defense
+                effective_damage = base_damage_dealt - player_total_defense
+                effective_damage = max(1, effective_damage) # Ensure at least 1 damage if attack hits
+                
+                player.health -= effective_damage
+                
                 if hasattr(player, 'is_hit'): 
                     player.is_hit = True
                     # Use player's own flash duration from config
@@ -55,7 +63,7 @@ class BaseMonster:
                 if hasattr(player, 'sound_manager') and player.sound_manager:
                     player.sound_manager.play_sound("player_hit")
                 
-                print(f"Monster (ID: {id(self)}, Type: {self.__class__.__name__}) attacked player. Player health: {player.health}")
+                print(f"Monster (ID: {id(self)}, Type: {self.__class__.__name__}) attacked player for {effective_damage} damage (Player total defense: {player_total_defense}). Player health: {player.health}")
                 self.last_attack_time = 0
 
     def update(self, platforms, player):

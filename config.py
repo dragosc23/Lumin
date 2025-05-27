@@ -7,17 +7,6 @@ SCREEN_HEIGHT = 600
 FPS = 60
 
 # Player Default Stats & Properties
-PLAYER_START_X = SCREEN_WIDTH // 2 - 20 # Assuming player width is 40
-PLAYER_START_Y = SCREEN_HEIGHT - 50 - 20 # Assuming player height is 40, and 20 is offset from bottom
-PLAYER_MAX_HEALTH = 200
-PLAYER_SPEED = 5
-PLAYER_ATTACK_DAMAGE = 20
-PLAYER_ATTACK_RANGE = 75
-PLAYER_ATTACK_COOLDOWN = 60 # In frames
-PLAYER_HIT_FLASH_DURATION = 10 # In frames
-PLAYER_ATTACK_VISUAL_DURATION = 7 # In frames
-PLAYER_INVENTORY_CAPACITY = 16 # Max number of item STACKS
-
 # Colors (RGB)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -27,6 +16,28 @@ BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
 HIT_COLOR = (255, 100, 100)       # For damage flash
 ATTACK_VISUAL_COLOR = (200, 200, 0) # For player attack visual
+
+# Player Default Stats & Properties
+PLAYER_START_X = SCREEN_WIDTH // 2 - 20 # Assuming player width is 40
+PLAYER_START_Y = SCREEN_HEIGHT - 50 - 20 # Assuming player height is 40, and 20 is offset from bottom
+PLAYER_WIDTH = 40
+PLAYER_HEIGHT = 50
+PLAYER_COLOR = GREEN # References the GREEN color defined above
+PLAYER_MAX_HEALTH = 200
+PLAYER_SPEED = 5
+PLAYER_ATTACK_DAMAGE = 20
+PLAYER_ATTACK_RANGE = 75
+PLAYER_ATTACK_COOLDOWN = 60 # In frames
+PLAYER_HIT_FLASH_DURATION = 10 # In frames
+PLAYER_ATTACK_VISUAL_DURATION = 7 # In frames
+PLAYER_INVENTORY_CAPACITY = 16 # Max number of item STACKS
+XP_PER_LEVEL_BASE = 100      # Base XP needed for each level (e.g., level 1 needs 100, level 2 needs 200)
+XP_PER_MONSTER_DEFEAT = 25   # XP awarded for defeating a common monster
+HEALTH_GAIN_PER_LEVEL = 20   # How much max_health increases per level
+ATTACK_POWER_GAIN_PER_LEVEL = 2 # How much attack_power increases per level
+DEFENSE_GAIN_PER_LEVEL = 1      # How much defense increases per level
+PLAYER_BASE_ATTACK_POWER = 10 # Player's base attack power
+PLAYER_BASE_DEFENSE = 5       # Player's base defense
 
 
 # Pet Default Stats
@@ -40,6 +51,8 @@ PET_HIT_FLASH_DURATION = 10 # In frames
 PET_WIDTH = 20
 PET_HEIGHT = 20
 PET_COLOR = BLUE # Uses color defined above
+PET_SPAWN_OFFSET_X = 50 # Horizontal offset from player for pet spawning
+PET_ASSIST_RANGE_MULTIPLIER = 1.5 # Multiplier for player's attack range to determine pet's assist range
 
 
 # Monster Properties
@@ -65,7 +78,24 @@ GENERIC_ITEM_DEFAULTS = {
         "description": "Restores a small amount of health.",
         "value": 25,
         "stackable": True,
-        "max_stack": 5 # Potions might stack less
+        "max_stack": 5, # Potions might stack less
+        "heal_amount": 50 # Added from HealthPotion constructor for consistency
+    },
+    "BasicSword": {
+        "item_class_name": "Weapon", # Used by factory
+        "name": "Basic Sword",
+        "description": "A simple, trusty sword.",
+        # "slot": "weapon", # Automatically set by Weapon class, redundant here
+        "stat_modifiers": {"attack_power": 3},
+        "value": 15
+    },
+    "LeatherArmor": {
+        "item_class_name": "Armor", # Used by factory
+        "name": "Leather Armor",
+        "description": "Basic protection.",
+        "slot": "body", # Specify which armor slot for Armor class constructor
+        "stat_modifiers": {"defense": 5},
+        "value": 20
     }
 }
 
