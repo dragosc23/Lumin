@@ -52,6 +52,22 @@ JUMP_STRENGTH = -20
 # Item Defaults
 DEFAULT_ITEM_MAX_STACK = 20 # Default max stack for generic items if not specified
 
+GENERIC_ITEM_DEFAULTS = {
+    "MonsterPart": {
+        "name": "Monster Part", 
+        "description": "A common part from a defeated monster.",
+        "value": 5,
+        "stackable": True,
+        "max_stack": DEFAULT_ITEM_MAX_STACK 
+    },
+    "HealthPotion": { # Assuming HealthPotion will be an item type
+        "name": "Health Potion",
+        "description": "Restores a small amount of health.",
+        "value": 25,
+        "stackable": True,
+        "max_stack": 5 # Potions might stack less
+    }
+}
 
 # Default Monster Stats (base values, can be overridden by LEVEL_CONFIGS)
 DEFAULT_GRUNT_WIDTH = 40
@@ -83,6 +99,69 @@ DEFAULT_FLYER_STATS = {
     "vertical_amplitude": 30,
     "vertical_speed_factor": 0.01
 }
+
+# LEVEL_CONFIGS
+# Defines monsters per level, their stats (can override defaults), and drops.
+LEVEL_CONFIGS = [
+    {
+        "monsters": [
+            {
+                "type": "Grunt", "count": 1, "patrol_range": 50,
+                "drops": [
+                    {"item_id": "MonsterPart", "chance": 1.0, "quantity": 1},
+                    {"item_id": "HealthPotion", "chance": 0.2, "quantity": 1}
+                ]
+            }
+        ],
+        "message": "Level 1: A Grunt with potential drops!"
+    },
+    {
+        "monsters": [
+            {
+                "type": "Grunt", "count": 2, "patrol_range": 50, # This implies two Grunts, each with these drops
+                "drops": [
+                    {"item_id": "MonsterPart", "chance": 1.0, "quantity": 1},
+                    {"item_id": "HealthPotion", "chance": 0.2, "quantity": 1}
+                ]
+            }
+        ],
+        "message": "Level 2: Two Grunts, more chances for loot!"
+    },
+    {
+        "monsters": [
+            {
+                "type": "Flyer", "count": 1, 
+                "vertical_amplitude": 30, "vertical_speed_factor": 0.005, "patrol_range": 70,
+                "drops": [
+                    {"item_id": "MonsterPart", "chance": 0.75, "quantity": 1},
+                    {"item_id": "HealthPotion", "chance": 0.05, "quantity": 1}
+                ]
+            }
+        ],
+        "message": "Level 3: A Flyer appears with its own loot table!"
+    },
+    {
+        "monsters": [
+            {
+                "type": "Grunt", "count": 1, "patrol_range": 50,
+                "drops": [
+                    {"item_id": "MonsterPart", "chance": 1.0, "quantity": 1},
+                    {"item_id": "HealthPotion", "chance": 0.2, "quantity": 1}
+                ]
+            },
+            {
+                "type": "Flyer", "count": 1, 
+                "vertical_amplitude": 30, "vertical_speed_factor": 0.005, "patrol_range": 70,
+                "drops": [
+                    {"item_id": "MonsterPart", "chance": 0.75, "quantity": 1},
+                    {"item_id": "HealthPotion", "chance": 0.05, "quantity": 1}
+                ]
+            }
+        ],
+        "message": "Level 4: Mixed company, mixed loot!"
+    }
+]
+
 
 # UI settings
 UI_FONT_FAMILY = "arial"

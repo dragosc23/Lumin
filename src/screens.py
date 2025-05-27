@@ -238,6 +238,9 @@ class GameplayScreen(BaseScreen):
                     creation_args["attack_damage"] = creation_args.pop("damage")
                 if "patrol_range" in creation_args:
                     creation_args["patrol_range_x"] = creation_args.pop("patrol_range")
+                
+                # Add possible_drops from the monster_group_config
+                creation_args['possible_drops'] = monster_group_config.get('drops')
 
                 new_monster = None
                 if monster_type_str == "Grunt":
@@ -324,13 +327,41 @@ class GameplayScreen(BaseScreen):
         # UI Text (Health, Level, Inventory)
         health_text = f"Health: {self.player.health}/{self.game_manager.PLAYER_MAX_HEALTH}"
         level_text = f"Level: {self.game_manager.current_level_index + 1}"
-        inventory_count = self.player.inventory.count("Monster Part")
-        inventory_text = f"Monster Parts: {inventory_count}"
         
         # Accessing draw_text_utility from game_manager
-        self.game_manager.draw_text_utility(surface, health_text, self.ui_font, self.WHITE, 10, 10)
-        self.game_manager.draw_text_utility(surface, level_text, self.ui_font, self.WHITE, 10, 40)
-        self.game_manager.draw_text_utility(surface, inventory_text, self.ui_font, self.WHITE, 10, 70)
+        self.game_manager.draw_text_utility(surface, health_text, self.ui_font, self.game_manager.config.WHITE, 10, 10)
+        self.game_manager.draw_text_utility(surface, level_text, self.ui_font, self.game_manager.config.WHITE, 10, 40)
+
+        # New Inventory Display Logic
+        inventory_y_start = 70 # Starting Y position for inventory list (below Level)
+        line_height = 25       # Height for each line of text (adjust based on font size)
+
+        if hasattr(self.game_manager, 'player') and hasattr(self.game_manager.player, 'inventory') and hasattr(self.game_manager.player.inventory, 'get_all_items'):
+            item_slots = self.game_manager.player.inventory.get_all_items()
+            
+            inventory_title_text = "Inventory:"
+            self.game_manager.draw_text_utility(surface, inventory_title_text, self.ui_font,
+                                                self.game_manager.config.WHITE, 10, inventory_y_start)
+            
+            if not item_slots:
+                inventory_empty_text = "  Empty" # Indent "Empty"
+                self.game_manager.draw_text_utility(surface, inventory_empty_text, self.ui_font, 
+                                                    self.game_manager.config.WHITE, 10, inventory_y_start + line_height)
+            else:
+                current_y = inventory_y_start + line_height
+                for slot in item_slots:
+                    item = slot.get('item')
+                    quantity = slot.get('quantity')
+                    if item and quantity is not None: 
+                        item_line = f"  - {item.name}: {quantity}" # Indent item list
+                        self.game_manager.draw_text_utility(surface, item_line, self.ui_font, 
+                                                            self.game_manager.config.WHITE, 10, current_y)
+                        current_y += line_height
+                        if current_y > self.game_manager.screen_height - 20: 
+                            break 
+        else:
+            self.game_manager.draw_text_utility(surface, "Inventory: N/A", self.ui_font,
+                                                self.game_manager.config.RED, 10, inventory_y_start)
 
 
 class GameOverScreen(BaseScreen):

@@ -152,18 +152,8 @@ class Player:
                     if monster.health <= 0:
                         if self.sound_manager:
                             self.sound_manager.play_sound("monster_die")
-                        
-                        # Create an Item instance for the drop
-                        monster_part_item = Item(name="Monster Part", 
-                                                 description="A part from a defeated monster.", 
-                                                 value=5, 
-                                                 stackable=True, 
-                                                 max_stack=config.DEFAULT_ITEM_MAX_STACK if hasattr(config, 'DEFAULT_ITEM_MAX_STACK') else 20) # Add default max_stack to config or use a value
-                        
-                        if self.inventory.add_item(monster_part_item):
-                            print(f"Monster (ID: {id(monster)}) defeated! It dropped a '{monster_part_item.name}'.")
-                        else:
-                            print(f"Monster (ID: {id(monster)}) defeated! Dropped '{monster_part_item.name}', but inventory is full.")
+                        # Item creation and adding logic is now moved to GameplayScreen.update
+                        print(f"Monster (ID: {id(monster)}) defeated by player.") 
                         
                     self.last_attack_time = 0
                     attack_occurred = True 
